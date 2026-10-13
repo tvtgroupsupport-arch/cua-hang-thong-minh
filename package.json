@@ -1,23 +1,29 @@
 {
   "name": "tap-hoa-quan-ly",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "description": "Tạp Hóa – app quản lý cửa hàng tạp hóa (bán hàng, kho, công nợ, báo cáo) chạy offline trên Android/PWA",
   "type": "module",
   "scripts": {
     "serve": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/serve.ps1",
-    "sync": "npx cap sync android && node scripts/patch-android.mjs",
+    "build": "node scripts/build-native.mjs",
+    "sync": "npm run build && npx cap sync android && node scripts/patch-android.mjs",
     "apk": "npm run sync && cd android && gradlew assembleDebug"
   },
   "dependencies": {
+    "@capacitor-community/file-opener": "^7.0.1",
+    "@capacitor-community/screen-brightness": "^7.0.0",
+    "@capacitor-mlkit/barcode-scanning": "^7.0.0",
     "@capacitor/android": "^7.0.0",
+    "@capacitor/app": "^7.0.0",
     "@capacitor/core": "^7.0.0",
     "@capacitor/filesystem": "^7.0.0",
+    "@capacitor/haptics": "^7.0.5",
     "@capacitor/share": "^7.0.0",
-    "@capacitor-mlkit/barcode-scanning": "^7.0.0",
     "capacitor-thermal-printer": "^0.2.5"
   },
   "devDependencies": {
-    "@capacitor/cli": "^7.0.0"
+    "@capacitor/cli": "^7.0.0",
+    "esbuild": "^0.24.0"
   }
 }

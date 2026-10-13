@@ -17,10 +17,14 @@ jobs:
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: 21 }
       - run: npm install
+      - name: Đóng gói cầu nối native (esbuild → www/native-bridge.js)
+        run: npm run build
       - name: Thêm nền tảng Android
         run: test -d android || npx cap add android
-      - name: Đồng bộ giao diện + vá AndroidManifest
+      - name: Đồng bộ giao diện + vá AndroidManifest/phiên bản
         run: npm run sync
+        env:
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
       - name: Biên dịch APK (debug — cài thẳng được lên điện thoại)
         working-directory: android
         run: ./gradlew assembleDebug --no-daemon

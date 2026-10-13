@@ -1,5 +1,8 @@
 import * as E from '../www/js/engine/index.js';
 import { S, memoryAdapter } from '../www/js/store.js';
+import { _tables, ean13, ean8, eanValid, encodeAuto, code128, C128 } from '../www/js/lib/barcode.js';
+import { modelFromSale, layoutReceipt, wrap, PAPER } from '../www/js/receipt-image.js';
+import { layoutLabel } from '../www/js/label.js';
 import { ean13Check, DAY, dayStart, toCsv, parseCsv, norm, parseMoney, fmtMoney } from '../www/js/util.js';
 
 const tests = [];
@@ -455,6 +458,156 @@ test('cân đối tổng: dữ liệu mẫu 30 ngày giữ đúng mọi bất bi
   ok(all.grossProfit > 0 && all.grossProfit < all.revenue, 'lãi hợp lý');
   const d = E.dashboard(); ok(d.inventory.cost > 0);
   eq(E.fundBalances().cash + E.fundBalances().bank, E.cashFlows().reduce((a, f) => a + f.amount, 0));
+});
+
+/* ============ Mã vạch, hoá đơn ảnh, tem ============ */
+test('mã vạch: bảng mã nhất quán (R = đảo L, G = đảo ngược R, tính chẵn lẻ), EAN-13/EAN-8 đúng cấu trúc', () => {
+  const { L, G, R, PARITY } = _tables;
+  for (let d = 0; d < 10; d++) {
+    eq(R[d], L[d].split('').map(c => c === '1' ? '0' : '1').join(''), 'R' + d);
+    eq(G[d], R[d].split('').reverse().join(''), 'G' + d);
+    ok(L[d].length === 7 && [...L[d]].filter(c => c === '1').length % 2 === 1, 'L lẻ ' + d); ok([...G[d]].filter(c => c === '1').length % 2 === 0, 'G chẵn ' + d);
+  }
+  eq(PARITY.length, 10);
+  const bits = ean13('5901234123457'); eq(bits.length, 95); eq(bits.slice(0, 3), '101'); eq(bits.slice(45, 50), '01010'); eq(bits.slice(92), '101');
+  // giải mã ngược: nửa trái theo parity, nửa phải theo R → phải ra đúng các chữ số
+  const left = []; let par = '';
+  for (let i = 0; i < 6; i++) { const seg = bits.slice(3 + i * 7, 10 + i * 7); const l = L.indexOf(seg); if (l >= 0) { par += 'L'; left.push(l); } else { par += 'G'; left.push(G.indexOf(seg)); } }
+  eq(left.join(''), '901234'); eq(PARITY.indexOf(par), 5);
+  eq([...Array(6)].map((_, i) => R.indexOf(bits.slice(50 + i * 7, 57 + i * 7))).join(''), '123457');
+  eq(ean8('73513537').length, 67); throws(() => ean13('5901234123456'), /không hợp lệ/); ok(eanValid('4006381333931'));
+  eq(encodeAuto('5901234123457').type, 'EAN-13'); eq(encodeAuto('ABC-123').type, 'Code128'); eq(encodeAuto('036000291452').type, 'UPC-A');
+});
+
+test('mã vạch Code 128: mọi ký hiệu 11 module, START B/STOP đúng chuẩn, checksum', () => {
+  eq(C128.length, 107);
+  C128.slice(0, 106).forEach((p, i) => { eq(p.length, 6, 'ký hiệu ' + i); eq([...p].reduce((a, c) => a + +c, 0), 11, 'tổng module ' + i); });
+  eq([...C128[106]].reduce((a, c) => a + +c, 0), 13);
+  eq(new Set(C128).size, 107, 'không có hai ký hiệu trùng nhau');
+  const bits = code128('Hello'); eq(bits.length, 11 * 8 + 2);
+  eq(bits.slice(0, 11), '11010010000', 'START B'); eq(bits.slice(-13), '1100011101011', 'STOP');
+  // checksum: 104 + H(40)*1 + e(69)*2 + l(76)*3 + l(76)*4 + o(79)*5 = 1209; 1209 % 103 = 76
+  eq(1209 % 103, 76);
+  const sym = v => [...C128[v]].reduce((s, w, i) => s + (i % 2 ? '0' : '1').repeat(+w), '');
+  eq(bits.slice(-24, -13), sym(76), 'ký tự kiểm tra');
+  throws(() => code128('Tiếng Việt'), /ASCII/);
+});
+
+test('hoá đơn ảnh: bố cục không tràn khổ giấy, mọi dòng có toạ độ, hỗ trợ tên dài', async () => {
+  await fresh();
+  E.saveSettings({ store: { name: 'Tạp hóa Minh Anh – Chuyên bán lẻ nhu yếu phẩm', address: '12 Lê Lợi, Quận 1, TP. Hồ Chí Minh' } });
+  const p = prod({ name: 'Nước tăng lực Red Bull lon 250ml thùng 24 lon khuyến mãi đặc biệt', stock: 50 });
+  const s = sell([L(p, 3)]);
+  const model = modelFromSale(s);
+  const measure = (t, px) => t.length * px * 0.55;           // phông giả: mỗi ký tự rộng 0,55 × cỡ chữ
+  for (const paper of [58, 80]) {
+    const lay = layoutReceipt(measure, model, paper), W = PAPER[paper].dots;
+    ok(lay.height > 100 && lay.width === W, 'kích thước');
+    for (const op of lay.ops.filter(o => o.t === 'text' && o.align !== 'right' && o.x == null)) ok(measure(op.text, op.px) <= W - 12 + 0.01, `dòng "${op.text}" tràn khổ ${paper}mm`);
+    ok(lay.ops.filter(o => o.t === 'text').every(o => o.y >= 0 && o.y < lay.height), 'toạ độ trong ảnh');
+    ok(lay.ops.some(o => o.text && o.text.includes('THANH TOÁN')), 'có tổng tiền');
+  }
+  eq(wrap(t => t.length * 10, 'aaaaaaaaaaaaaaaaaaaa bb', 100).join('|'), 'aaaaaaaaaa|aaaaaaaaaa|bb', 'từ quá dài bị cắt');
+});
+
+test('tem mã vạch: bố cục có tên, giá, thanh mã và chữ số', () => {
+  const measure = (t, px) => t.length * px * 0.55;
+  const lay = layoutLabel(measure, { name: 'Sữa tươi Vinamilk 180ml', price: 8000, unitName: '', code: '5901234123457' }, 384);
+  const bars = lay.ops.find(o => o.t === 'bars'); ok(bars && bars.bits.length === 95); ok(bars.x >= 0 && bars.x + bars.bits.length * bars.mod <= 384, 'thanh mã nằm trong khổ giấy');
+  ok(lay.ops.some(o => o.text === '8.000đ')); ok(lay.ops.some(o => o.text === '5901234123457'));
+  const none = layoutLabel(measure, { name: 'X', price: null, code: '' }, 384); ok(none.ops.some(o => o.text && o.text.includes('chưa có mã')));
+});
+
+/* ============ Kiểm thử đối kháng (tìm lỗi sổ sách) ============ */
+test('trả hết từng dòng của hoá đơn có KM + giảm giá + làm tròn: tổng hoàn = tổng hoá đơn, không lệch đồng nào', async () => {
+  await fresh();
+  E.saveSettings({ sale: { rounding: 500 } });
+  const a = prod({ name: 'A', stock: 100, units: [{ name: 'cái', price: 3300 }] }), b = prod({ name: 'B', stock: 100, units: [{ name: 'cái', price: 1700 }] }), c = prod({ name: 'C', stock: 100, units: [{ name: 'cái', price: 9900 }] });
+  E.savePromo({ name: '3 tặng 1', type: 'buyxgety', scope: 'product', productIds: [a.id], buyQty: 3, getQty: 1 });
+  const s = sell([L(a, 8), L(b, 7), L(c, 3)], null, { discount: { type: 'percent', value: 7 } });
+  eq(s.items.reduce((x, i) => x + i.net, 0), s.total);
+  let sum = 0;
+  s.items.forEach((it, i) => { const r = E.createReturn({ saleId: s.id, items: [{ lineIndex: i, qty: it.qty }] }); sum += r.total; });
+  eq(sum, s.total, 'tổng tiền hoàn');
+  eq(S.get('sales', s.id).returnedTotal, s.total); eq(E.saleProfit(S.get('sales', s.id)), 0, 'trả hết → lãi 0'); ok(stockSumOk());
+  eq(S.get('products', a.id).stock, 100);
+});
+
+test('trả hàng từng phần nhiều lần rồi trả nốt: không lệch đồng nào, lô trả đúng nơi', async () => {
+  await fresh();
+  const p = prod({ trackBatch: true, cost: 0 });
+  const d = n => new Date(Date.now() + n * DAY).toISOString().slice(0, 10);
+  E.createPurchase({ items: [{ productId: p.id, unitId: p.units[0].id, qty: 3, cost: 5000, lot: 'A', expiry: d(5) }] });
+  E.createPurchase({ items: [{ productId: p.id, unitId: p.units[0].id, qty: 10, cost: 6000, lot: 'B', expiry: d(50) }] });
+  const s = sell([L(p, 7)], null, { discount: { type: 'amount', value: 1001 } });      // lấy hết lô A (3) + 4 từ lô B
+  eq(Object.fromEntries(E.batchesOf(p.id).map(b => [b.lot, b.qty])), { B: 6 });
+  let got = 0;
+  for (const q of [1, 2, 1, 3]) got += E.createReturn({ saleId: s.id, items: [{ lineIndex: 0, qty: q }] }).total;
+  eq(got, s.total); eq(S.get('products', p.id).stock, 13);
+  eq(Object.fromEntries(E.batchesOf(p.id).map(b => [b.lot, b.qty])), { A: 3, B: 10 }, 'hàng trả quay về đúng lô đã xuất');
+  ok(stockSumOk());
+});
+
+test('nhập hàng cho hàng đang tồn âm: giá vốn lấy theo giá mới (không bị kéo âm)', async () => {
+  await fresh();
+  const p = prod({ stock: 2, cost: 5000 });
+  sell([L(p, 5)]); eq(S.get('products', p.id).stock, -3);
+  E.createPurchase({ items: [{ productId: p.id, unitId: p.units[0].id, qty: 10, cost: 8000 }] });
+  eq(S.get('products', p.id).cost, 8000); eq(S.get('products', p.id).stock, 7);
+});
+
+test('huỷ hoá đơn trả lại lượt khuyến mãi; hai hoá đơn liên tiếp không dùng chung phân bổ lô', async () => {
+  await fresh();
+  const p = prod({ stock: 50 }); const pr = E.savePromo({ name: 'KM', type: 'amount', scope: 'product', productIds: [p.id], value: 500, limit: 5 });
+  const s1 = sell([L(p, 1)]), s2 = sell([L(p, 1)]); eq(S.get('promos', pr.id).used, 2);
+  E.voidSale(s1.id, 'x'); eq(S.get('promos', pr.id).used, 1); eq(S.get('products', p.id).stock, 49);
+  E.voidSale(s2.id, 'y'); eq(S.get('promos', pr.id).used, 0); eq(S.get('products', p.id).stock, 50); ok(stockSumOk());
+});
+
+test('khoá nhân viên đang đăng nhập: mọi quyền biến mất ngay', async () => {
+  await fresh();
+  const p = prod({ stock: 5 });
+  const st = await E.saveStaff({ name: 'Tạm', username: 'tam', password: 'abcd', role: 'cashier' });
+  E.logout(); await E.login('tam', 'abcd'); ok(E.can('sell'));
+  S.session.staffId = st.id; S.mut('staff', st.id).active = false;
+  ok(!E.can('sell')); throws(() => sell([L(p, 1)]), /không có quyền/);
+});
+
+test('khôi phục sao lưu làm mới cả bộ nhớ đệm cài đặt', async () => {
+  await fresh();
+  E.saveSettings({ store: { name: 'Quán A' } }); eq(E.settings().store.name, 'Quán A');
+  const dump = JSON.parse(JSON.stringify(S.dump()));
+  E.saveSettings({ store: { name: 'Quán B' } }); eq(E.settings().store.name, 'Quán B');
+  await S.restore(dump); eq(E.settings().store.name, 'Quán A');
+});
+
+test('khách còn nợ không xoá được; khách đã có hoá đơn chỉ bị ẩn; hàng đã bán không xoá được', async () => {
+  await fresh();
+  const p = prod({ stock: 10 }), c = E.saveCustomer({ name: 'Nợ' });
+  sell([L(p, 2)], [{ method: 'debt', amount: 20000 }], { customerId: c.id });
+  throws(() => E.deleteCustomer(c.id), /còn nợ/);
+  E.payCustomerDebt({ customerId: c.id, amount: 20000 }); E.deleteCustomer(c.id);
+  eq(S.get('customers', c.id).active, false); eq(E.searchCustomers('nợ').length, 0);
+  throws(() => E.deleteProduct(p.id), /phát sinh giao dịch/);
+  const fresh1 = prod({ name: 'Mới' }); E.deleteProduct(fresh1.id); eq(S.get('products', fresh1.id), null);
+});
+
+test('CSV: dòng lỗi không làm hỏng các dòng khác', async () => {
+  await fresh();
+  const r = E.importProductsCsv(toCsv([['Tên hàng', 'Mã vạch', 'Giá bán'], ['A', '111', '1000'], ['B', '222', '2000'], ['C', '111 222', '3000'], ['D', '333', '4000']]));
+  eq(r.created + r.updated + r.errors.length, 4, 'mỗi dòng đều có kết quả'); ok(r.errors.length <= 1);
+  eq(E.lookupBarcode('333').product.name, 'D'); eq(E.lookupBarcode('222').product.units[0].barcodes.includes('222'), true); ok(stockSumOk());
+});
+
+test('xuất hủy đúng lô được chọn', async () => {
+  await fresh();
+  const p = prod({ trackBatch: true, cost: 0 });
+  E.createPurchase({ items: [{ productId: p.id, unitId: p.units[0].id, qty: 5, cost: 1000, lot: 'X', expiry: '2099-01-01' }] });
+  E.createPurchase({ items: [{ productId: p.id, unitId: p.units[0].id, qty: 5, cost: 2000, lot: 'Y', expiry: '2099-06-01' }] });
+  const y = E.batchesOf(p.id).find(b => b.lot === 'Y');
+  const w = E.createWriteOff({ items: [{ productId: p.id, unitId: p.units[0].id, qty: 2, batchId: y.id }], reason: 'damaged' });
+  eq(Object.fromEntries(E.batchesOf(p.id).map(b => [b.lot, b.qty])), { X: 5, Y: 3 }); eq(w.items[0].batchId, y.id);
+  throws(() => E.createWriteOff({ items: [{ productId: p.id, unitId: p.units[0].id, qty: 9, batchId: y.id }], reason: 'lost' }), /không đủ/);
 });
 
 /* ============ Chạy ============ */

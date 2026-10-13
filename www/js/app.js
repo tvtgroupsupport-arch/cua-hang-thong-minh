@@ -3,6 +3,7 @@ import { S, idbAdapter, memoryAdapter } from './store.js';
 import * as E from './engine/index.js';
 import { h, icon, mount, toast, debounce } from './ui.js';
 import { applyTheme, lsGet, lsSet } from './theme.js';
+import { loadNativeBridge, onBack, isNative } from './native.js';
 import { viewLogin } from './views/login.js';
 import { viewPos } from './views/pos.js';
 import { viewSales } from './views/sales.js';
@@ -105,23 +106,46 @@ function route() {
   catch (e) { console.error(e); mount(shell.main, h('div', { class: 'banner red' }, 'Lỗi hiển thị: ' + e.message)); }
 }
 
+/** Mở kho dữ liệu với hạn chót: nếu IndexedDB treo (đã gặp với plugin SQLite trong app BEPO) thì báo rõ thay vì kẹt mãi ở màn "Đang tải". */
+async function openStore() {
+  let timer;
+  try {
+    await Promise.race([S.init(idbAdapter()), new Promise((_, rej) => { timer = setTimeout(() => rej(new Error('Mở bộ nhớ quá 10 giây')), 10000); })]);
+    try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}   // xin hệ thống không tự dọn dữ liệu khi thiếu bộ nhớ
+  } catch (e) {
+    console.error(e); await S.init(memoryAdapter());
+    toast('Không mở được bộ nhớ lưu trữ – dữ liệu sẽ MẤT khi đóng app. Hãy sao lưu thường xuyên! (' + e.message + ')', 'error', 10000);
+  } finally { clearTimeout(timer); }
+}
+
+/** Nút Back của Android: đóng hộp thoại trước, rồi lùi màn hình, rồi về Bán hàng; ở Bán hàng thì thu nhỏ app (không thoát hẳn, khỏi mất phiên). */
+function handleBack() {
+  if (document.querySelector('.overlay')) { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); return true; }
+  if (!shell) return false;
+  const name = (location.hash.replace(/^#\/?/, '') || '').split('/')[0];
+  if (name && name !== 'pos' && ['sales', 'customers', 'suppliers', 'promos', 'cash', 'settings', 'staff', 'logs', 'help'].includes(name)) { go('more'); return true; }
+  if (name && name !== 'pos') { go('pos'); return true; }
+  return false;
+}
+
+let lastPersistWarn = 0;
 async function boot() {
   applyTheme();
-  try { await S.init(idbAdapter()); }
-  catch (e) {
-    console.error(e); await S.init(memoryAdapter());
-    toast('Không mở được bộ nhớ lưu trữ – dữ liệu sẽ MẤT khi đóng app. Hãy sao lưu thường xuyên!', 'error', 8000);
-  }
+  await loadNativeBridge();
+  await openStore();
   const sid = lsGet(SESSION_KEY), st = sid && S.get('staff', sid);
   if (st && st.active) S.session.staffId = st.id;
   window.addEventListener('hashchange', route);
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') S.flush(); });
   window.addEventListener('pagehide', () => S.flush());
-  S.subscribe(debounce(() => { if (shell) renderNav(); }, 500));
+  S.subscribe(debounce(() => {
+    if (shell) renderNav();
+    if (S.persistError && Date.now() - lastPersistWarn > 30000) { lastPersistWarn = Date.now(); toast('CẢNH BÁO: không ghi được dữ liệu vào bộ nhớ (' + (S.persistError.message || 'lỗi') + '). Hãy sao lưu ngay!', 'error', 10000); }
+  }, 500));
+  onBack(handleBack);
   window.__app = { S, E, go };
-  const native = window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform();
+  const native = isNative();
   if ('serviceWorker' in navigator && /^https?:/.test(location.protocol) && !native) navigator.serviceWorker.register('sw.js').catch(() => {});
   route();
 }
 boot();
-

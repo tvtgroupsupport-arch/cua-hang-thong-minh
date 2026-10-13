@@ -4,6 +4,7 @@ import * as E from '../engine/index.js';
 import { h, icon, iconBtn, mount, modal, toast, guard, confirmBox, promptBox, field, select, checkbox, badge, kv, empty, moneyInput, qtyInput, debounce, tabs } from '../ui.js';
 import { fmtMoney, fmtNum, fmtDateTime, fmtDate, parseQty, parseMoney, ean13Check, ymd } from '../util.js';
 import { openScanner, onScan, canScan, saveFile, pickFile, readFileText, resizeImage } from '../native.js';
+import { labelDialog } from '../label.js';
 
 const thumb = (p, size) => h('div', { class: 'thumb', style: size ? { width: size + 'px', height: size + 'px' } : null }, p.image ? h('img', { src: p.image }) : p.name.slice(0, 1).toUpperCase());
 const catOptions = () => [['', '— Chưa phân nhóm —'], ...E.categoryTree().map(({ cat, depth }) => [cat.id, '  '.repeat(depth) + cat.name])];
@@ -52,7 +53,7 @@ export function viewProducts(root, ctx) {
         h('div', { class: 'list' }, E.stockMovesOf(id, 15).map(m => h('div', { class: 'item' }, h('div', { class: 'grow' }, h('div', { class: 'ttl' }, MOVE_NAMES[m.type] || m.type), h('div', { class: 'sub' }, fmtDateTime(m.ts) + (m.reason ? ' · ' + m.reason : ''))),
           h('div', { class: 'right' }, h('div', { class: 'bold ' + (m.qty > 0 ? 'pos-c' : 'neg-c') }, (m.qty > 0 ? '+' : '') + fmtNum(m.qty)), h('div', { class: 'tiny muted' }, 'còn ' + fmtNum(m.after))))))),
       E.priceHistory(id).length ? h('div', { class: 'mt12' }, h('h3', { class: 'small muted' }, 'Lịch sử đổi giá'), h('div', { class: 'list' }, E.priceHistory(id).slice(0, 8).map(l => h('div', { class: 'item' }, h('div', { class: 'grow small' }, l.detail.replace(/^Đổi giá "[^"]*": /, ''), h('div', { class: 'tiny muted' }, `${fmtDateTime(l.ts)} · ${l.who}`)))))) : null);
-    const acts = [];
+    const acts = [{ label: 'In tem', onClick: close => { close(); labelDialog(p); return false; } }];
     if (canEdit) {
       acts.push({ label: 'Sửa', kind: 'primary', onClick: close => { close(); productForm(p, { onSaved: draw }); return false; } });
       acts.push({ label: p.active ? 'Ngừng bán' : 'Bán lại', onClick: async () => { E.setProductActive(id, !p.active); draw(); } });

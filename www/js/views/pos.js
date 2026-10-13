@@ -3,7 +3,7 @@ import { S } from '../store.js';
 import * as E from '../engine/index.js';
 import { h, icon, iconBtn, mount, modal, toast, guard, confirmBox, promptBox, moneyInput, qtyInput, field, select, pickFromList, badge, kv, debounce } from '../ui.js';
 import { fmtMoney, fmtNum, parseQty, parseMoney, DAY, dayStart } from '../util.js';
-import { beep, openScanner, onScan, canScan, printReceipt, shareText } from '../native.js';
+import { beep, openScanner, onScan, canScan, printReceipt, shareText, boostBrightness, restoreBrightness } from '../native.js';
 import { receiptText } from '../receipt.js';
 import { QR } from '../lib/qr.js';
 import { VietQR } from '../lib/vietqr.js';
@@ -258,13 +258,13 @@ export function viewPos(root, ctx) {
     const body = h('div', null,
       h('div', { class: 'bigmoney' }, fmtMoney(total)), h('div', { class: 'center small muted mb8' }, cust ? 'Khách: ' + cust.name : 'Khách lẻ'),
       field('Tiền khách đưa (tiền mặt)', given), quick,
-      h('div', { class: 'row mt12' }, h('div', { class: 'grow' }, field('Chuyển khoản / VietQR', transfer)), h('button', { class: 'btn sm', style: { marginTop: '10px' }, onClick: () => { transfer.num = total; debt.num = 0; givenTouched = false; qrOn = true; upd(); } }, 'Cả đơn')),
-      h('div', { class: 'row' }, h('button', { class: 'btn sm soft', onClick: () => { qrOn = !qrOn; if (qrOn) drawQr(); else qrBox.classList.add('hide'); } }, icon('qr', 16), ' Hiện mã VietQR')),
+      h('div', { class: 'row mt12' }, h('div', { class: 'grow' }, field('Chuyển khoản / VietQR', transfer)), h('button', { class: 'btn sm', style: { marginTop: '10px' }, onClick: () => { transfer.num = total; debt.num = 0; givenTouched = false; qrOn = true; boostBrightness(); upd(); } }, 'Cả đơn')),
+      h('div', { class: 'row' }, h('button', { class: 'btn sm soft', onClick: () => { qrOn = !qrOn; if (qrOn) { boostBrightness(); drawQr(); } else { restoreBrightness(); qrBox.classList.add('hide'); } } }, icon('qr', 16), ' Hiện mã VietQR')),
       qrBox,
       cust ? h('div', { class: 'row mt12' }, h('div', { class: 'grow' }, field('Ghi nợ' + (cust.debtLimit ? ` (hạn mức ${fmtNum(cust.debtLimit)}, đang nợ ${fmtNum(cust.debt)})` : ` (đang nợ ${fmtNum(cust.debt)})`), debt)),
         h('button', { class: 'btn sm', style: { marginTop: '10px' }, onClick: () => { debt.num = total; transfer.num = 0; givenTouched = false; upd(); } }, 'Cả đơn')) : null,
       h('div', { class: 'mt12' }, info));
-    const m = modal({ title: 'Thanh toán', body, size: 'wide', actions: [{ label: 'Quay lại' }, { label: 'Xác nhận thanh toán', kind: 'primary', onClick: async () => {
+    const m = modal({ title: 'Thanh toán', body, size: 'wide', onClose: restoreBrightness, actions: [{ label: 'Quay lại' }, { label: 'Xác nhận thanh toán', kind: 'primary', onClick: async () => {
       const nc = needCash();
       if (nc < 0) { toast('Số tiền thanh toán không hợp lệ', 'error'); return false; }
       if (nc > 0 && given.num < nc) { toast('Tiền khách đưa chưa đủ', 'error'); return false; }

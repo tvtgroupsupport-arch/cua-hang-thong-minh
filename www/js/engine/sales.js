@@ -254,7 +254,8 @@ export function createReturn(d) {
       }
       p = S.get('products', productId);
       const qtyBase = roundQty(qty * factor);
-      if (restock) stockIn(productId, qtyBase, { type: 'return_in', retAlloc: alloc ? pickAlloc(alloc, qtyBase) : null, refType: 'return', ref: rid, reason: 'Khách trả hàng ' + code, lot: 'TRA-LAI', cost: costAmount / qtyBase });
+      const picked = alloc ? pickAlloc(alloc, qtyBase) : null;      // luôn ghi nhận phần đã trả theo thứ tự lô, để lần trả sau không dồn hết về lô đầu
+      if (restock) stockIn(productId, qtyBase, { type: 'return_in', retAlloc: picked, refType: 'return', ref: rid, reason: 'Khách trả hàng ' + code, lot: 'TRA-LAI', cost: costAmount / qtyBase });
       items.push({ lineIndex, productId, name: p.name, unitName, qty, qtyBase, amount, costAmount });
       total += amount;
     }
@@ -281,7 +282,7 @@ export function createReturn(d) {
 }
 function pickAlloc(alloc, qtyBase) {
   const out = []; let left = qtyBase;
-  for (const a of alloc) { if (left <= 0) break; const q = Math.min(a.qty, left); out.push({ batchId: a.batchId, qty: q }); left = roundQty(left - q); }
+  for (const a of alloc) { if (left <= 0) break; const q = Math.min(roundQty(a.qty - (a.ret || 0)), left); if (q <= 0) continue; a.ret = roundQty((a.ret || 0) + q); out.push({ batchId: a.batchId, qty: q }); left = roundQty(left - q); }
   return out;
 }
 

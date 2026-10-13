@@ -2,3 +2,4 @@ node_modules/
 android/
 .claude/
 *.log
+www/native-bridge.js

@@ -3,7 +3,7 @@ import { S } from '../store.js';
 import * as E from '../engine/index.js';
 import { h, icon, iconBtn, mount, modal, toast, guard, confirmBox, promptBox, field, select, checkbox, badge, kv, empty, moneyInput, qtyInput, alertBox } from '../ui.js';
 import { fmtMoney, fmtNum, fmtDateTime, parseQty, ymd } from '../util.js';
-import { saveFile, pickFile, readFileText, isNative } from '../native.js';
+import { saveFile, pickFile, readFileText, isNative, scanPrinters, printReceipt } from '../native.js';
 import { getTheme, setTheme } from '../theme.js';
 import { QR } from '../lib/qr.js';
 import { VietQR } from '../lib/vietqr.js';
@@ -46,9 +46,25 @@ export function viewSettings(root, ctx) {
   }
 
   /* ---- In ấn ---- */
-  const pr = st.print, p = { paper: select([[58, 'Giấy 58mm'], [80, 'Giấy 80mm']], pr.paper), auto: checkbox('Tự in hoá đơn sau khi thanh toán', pr.autoPrint), addr: h('input', { class: 'input', value: pr.printerAddress || '', placeholder: 'Địa chỉ Bluetooth máy in (vd. 00:11:22:33:44:55)' }) };
-  const printCard = h('div', { class: 'card' }, h('h3', null, 'In hoá đơn'), field('Khổ giấy', p.paper), p.auto, field('Máy in Bluetooth (chỉ bản Android)', p.addr, isNative() ? 'Để trống sẽ dùng hộp thoại in của hệ thống.' : 'Chỉ dùng được khi cài app trên điện thoại Android. Trên trình duyệt sẽ mở hộp thoại in.'),
-    h('button', { class: 'btn primary', onClick: () => save({ print: { paper: Number(p.paper.value), autoPrint: p.auto.input.checked, printerAddress: p.addr.value.trim() } }) }, 'Lưu'));
+  const pr = st.print, p = { paper: select([[58, 'Giấy 58mm'], [80, 'Giấy 80mm']], pr.paper), auto: checkbox('Tự in hoá đơn sau khi thanh toán', pr.autoPrint) };
+  let printerAddr = pr.printerAddress || '', printerName = pr.printerName || '';
+  const printerLbl = h('div', { class: 'small' });
+  const drawPrinter = () => { printerLbl.textContent = printerAddr ? `Máy in đã chọn: ${printerName || printerAddr}` : 'Chưa chọn máy in — hoá đơn sẽ lưu thành ảnh để gửi/in bằng app khác.'; };
+  async function pickPrinter() {
+    const found = new Map(), list = h('div', { class: 'list' });
+    const draw = () => mount(list, found.size ? [...found.values()].map(d => h('div', { class: 'item click', onClick: () => { printerAddr = d.address; printerName = d.name || d.address; drawPrinter(); m.close(); } }, h('div', { class: 'grow' }, h('div', { class: 'ttl' }, d.name || '(không tên)'), h('div', { class: 'sub' }, d.address)))) : empty('Đang tìm… hãy bật máy in và ghép đôi (pair) trong Cài đặt Bluetooth của điện thoại trước.'));
+    const m = modal({ title: 'Chọn máy in Bluetooth', body: list, actions: [{ label: 'Bỏ chọn máy in', onClick: () => { printerAddr = ''; printerName = ''; drawPrinter(); } }, { label: 'Đóng', kind: 'primary' }] });
+    draw();
+    try { await scanPrinters(ds => { for (const d of ds) if (d && d.address) found.set(d.address, d); draw(); }); } catch (e) { toast(e.message, 'error', 5000); }
+    if (!found.size) mount(list, empty('Không tìm thấy máy in nào.', 'Kiểm tra máy in đã bật, đã ghép đôi và đã cấp quyền Bluetooth/Vị trí cho app.'));
+  }
+  const testSale = () => ({ code: 'IN-THU', ts: Date.now(), staffName: E.currentUser().name, customerName: '', items: [{ name: 'Hàng thử tiếng Việt: Bánh mì ốp la, Đường Biên Hòa', qty: 2, unitName: 'cái', price: 10000, amount: 20000, manualDiscount: 0, promoDiscount: 0 }],
+    subtotal: 20000, discountTotal: 0, rounding: 0, total: 20000, payments: [{ method: 'cash', amount: 20000 }], cashGiven: 50000, change: 30000, debt: 0, pointsEarned: 0 });
+  const printCard = h('div', { class: 'card' }, h('h3', null, 'In hoá đơn'), field('Khổ giấy', p.paper), p.auto,
+    isNative() ? h('div', { class: 'mb8' }, printerLbl, h('button', { class: 'btn mt8', onClick: pickPrinter }, 'Tìm máy in Bluetooth')) : h('div', { class: 'small muted mb8' }, 'Chọn máy in Bluetooth chỉ có trong ứng dụng Android. Trên trình duyệt hoá đơn mở bằng hộp thoại in của hệ thống.'),
+    h('div', { class: 'row' }, h('button', { class: 'btn primary grow', onClick: () => save({ print: { paper: Number(p.paper.value), autoPrint: p.auto.input.checked, printerAddress: printerAddr, printerName } }) }, 'Lưu'),
+      h('button', { class: 'btn grow', onClick: async () => { await save({ print: { paper: Number(p.paper.value), printerAddress: printerAddr, printerName } }); printReceipt(testSale()); } }, 'In thử')));
+  drawPrinter();
 
   /* ---- Kho ---- */
   const k = { exp: qtyInput(st.stock.expiryWarnDays), dead: qtyInput(st.stock.deadStockDays), cover: qtyInput(st.stock.reorderCoverDays) };
@@ -61,11 +77,11 @@ export function viewSettings(root, ctx) {
   /* ---- Sao lưu ---- */
   const last = S.getMeta('lastBackup', 0);
   const backupCard = h('div', { class: 'card' }, h('h3', null, 'Sao lưu & khôi phục'), h('div', { class: 'small ' + (last && Date.now() - last < 7 * 864e5 ? 'muted' : 'warn-c'), style: { marginBottom: '8px' } }, last ? 'Sao lưu gần nhất: ' + fmtDateTime(last) : 'Chưa sao lưu lần nào – dữ liệu chỉ nằm trên thiết bị này!'),
-    h('div', { class: 'row wrap' }, h('button', { class: 'btn primary grow', onClick: backup }, icon('download', 18), ' Sao lưu ra tệp'), h('button', { class: 'btn grow', onClick: restore }, icon('upload', 18), ' Khôi phục từ tệp')),
+    h('div', { class: 'row wrap' }, h('button', { class: 'btn primary grow', onClick: () => backup('share') }, icon('download', 18), ' Sao lưu ra tệp'), h('button', { class: 'btn grow', onClick: restore }, icon('upload', 18), ' Khôi phục từ tệp'), isNative() ? h('button', { class: 'btn grow', onClick: () => backup('save') }, 'Lưu vào máy') : null),
     h('div', { class: 'small muted mt8' }, `Dung lượng dữ liệu: ${fmtNum(S.count('products'))} hàng · ${fmtNum(S.count('sales'))} hoá đơn · ${fmtNum(S.count('customers'))} khách. Hãy gửi tệp sao lưu lên Zalo/Google Drive để an toàn khi mất máy.`));
-  async function backup() {
+  async function backup(mode) {
     await S.flush();
-    const dump = S.dump(); const ok = await saveFile(`tap-hoa-sao-luu-${ymd(Date.now())}.json`, JSON.stringify(dump), 'application/json');
+    const dump = S.dump(); const ok = await saveFile(`tap-hoa-sao-luu-${ymd(Date.now())}.json`, JSON.stringify(dump), 'application/json', mode || 'share');
     if (ok !== false) { S.setMeta('lastBackup', Date.now()); await S.flush(); toast('Đã sao lưu', 'ok'); }
   }
   async function restore() {

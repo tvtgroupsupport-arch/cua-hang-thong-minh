@@ -1,11 +1,26 @@
 /* Cầu nối thiết bị: quét mã vạch, lưu/chia sẻ tệp, in hoá đơn, âm báo. Chạy được cả trên trình duyệt lẫn trong vỏ Capacitor (Android).
-   Mọi chỗ gọi plugin native đều có đường lui, nên app vẫn dùng được khi thiếu plugin/quyền. */
+   Trên Android, mọi lời gọi plugin đi qua window.NativeBridge (www/native-bridge.js, đóng gói từ src/native/bridge.js bằng esbuild — như app BEPO).
+   Không có NativeBridge (trình duyệt) thì dùng phương án dự phòng, nên app vẫn chạy được khi thiếu plugin/quyền. */
 import { h, icon, toast, modal } from './ui.js';
 import { settings } from './engine/index.js';
-import { receiptHtml, receiptThermal } from './receipt.js';
+import { receiptHtml } from './receipt.js';
+import { renderSale, PAPER } from './receipt-image.js';
 
-export const isNative = () => !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
-export const plugin = name => (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins[name]) || null;
+export const nb = () => window.NativeBridge || null;
+export const isNative = () => !!(nb() && nb().isNative);
+
+/** Nạp cầu nối native (chỉ trong vỏ Capacitor). Quá 6 giây không nạp được thì bỏ qua để app vẫn khởi động. */
+export function loadNativeBridge() {
+  const cap = window.Capacitor;
+  if (!(cap && cap.isNativePlatform && cap.isNativePlatform())) return Promise.resolve(false);
+  return new Promise(res => {
+    const s = document.createElement('script'); s.src = 'native-bridge.js';
+    const t = setTimeout(() => res(false), 6000);
+    s.onload = () => { clearTimeout(t); res(!!window.NativeBridge); };
+    s.onerror = () => { clearTimeout(t); res(false); };
+    document.head.appendChild(s);
+  });
+}
 
 /* ---------- Âm báo ---------- */
 let actx = null;
@@ -19,27 +34,26 @@ export function beep(kind = 'ok') {
     g.gain.setValueAtTime(0.15, actx.currentTime); g.gain.exponentialRampToValueAtTime(0.001, actx.currentTime + (kind === 'ok' ? 0.12 : 0.35));
     o.start(); o.stop(actx.currentTime + (kind === 'ok' ? 0.12 : 0.35));
   } catch (e) { /* không có âm thanh cũng không sao */ }
-  try { navigator.vibrate && navigator.vibrate(kind === 'ok' ? 25 : [60, 40, 60]); } catch (e) {}
+  try {
+    if (nb() && nb().haptics) { if (kind === 'ok') nb().haptics.tap(); else nb().haptics.error(); }
+    else if (navigator.vibrate) navigator.vibrate(kind === 'ok' ? 25 : [60, 40, 60]);
+  } catch (e) {}
 }
 
 /* ---------- Quét mã vạch ---------- */
-export const canScan = () => !!plugin('BarcodeScanner') || (!!navigator.mediaDevices && !!navigator.mediaDevices.getUserMedia && 'BarcodeDetector' in window);
+export const canScan = () => !!(nb() && nb().scan) || (!!navigator.mediaDevices && !!navigator.mediaDevices.getUserMedia && 'BarcodeDetector' in window);
 
-/** Mở màn hình quét. onCode(code) trả về true/undefined để đóng (quét một lần) hoặc `'keep'` để quét tiếp (liên tục). */
+/** Mở màn hình quét. onCode(code) trả về undefined để đóng (quét một lần) hoặc `'keep'` để quét tiếp (liên tục). */
 export async function openScanner({ title = 'Quét mã vạch', onCode, continuous = false }) {
-  const native = plugin('BarcodeScanner');
-  if (native) {
+  if (nb() && nb().scan) {
     try {
-      const perm = await native.requestPermissions();
-      if (perm.camera !== 'granted' && perm.camera !== 'limited') { toast('Chưa cấp quyền camera', 'error'); return; }
       for (;;) {
-        const { barcodes } = await native.scan();
-        const code = barcodes && barcodes[0] && (barcodes[0].rawValue || barcodes[0].displayValue);
+        const code = await nb().scan();
         if (!code) return;
         const r = await onCode(code);
         if (!(continuous && r === 'keep')) return;
       }
-    } catch (e) { if (!/cancel/i.test(e.message || '')) toast('Không quét được: ' + (e.message || e), 'error'); return; }
+    } catch (e) { if (!/cancel/i.test(e.message || '')) toast('Không quét được: ' + (e.message || e), 'error', 5000); return; }
   }
   if (!('BarcodeDetector' in window) || !navigator.mediaDevices) {
     toast('Thiết bị này không hỗ trợ quét bằng camera. Hãy dùng máy quét mã vạch (Bluetooth/USB) hoặc gõ mã.', 'error', 5000);
@@ -104,18 +118,17 @@ export function onScan(fn) {
     buf += e.key; lastKey = now;
   }, true);
 })();
+
 /* ---------- Lưu / chia sẻ tệp ---------- */
-export async function saveFile(filename, content, mime = 'text/plain') {
+/** mode 'share' (mặc định): hộp thoại chia sẻ/lưu; mode 'save': ghi vào thư mục riêng của app rồi mở (chỉ Android). Trả false nếu người dùng huỷ/lỗi. */
+export async function saveFile(filename, content, mime = 'text/plain', mode = 'share') {
   const blob = content instanceof Blob ? content : new Blob([content], { type: mime });
-  const fs = plugin('Filesystem'), share = plugin('Share');
-  if (fs && isNative()) {
+  if (isNative()) {
     try {
-      const data = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1]); r.onerror = rej; r.readAsDataURL(blob); });
-      const w = await fs.writeFile({ path: filename, data, directory: 'CACHE' });
-      if (share) await share.share({ title: filename, url: w.uri, dialogTitle: 'Lưu / gửi tệp' });
-      else toast('Đã lưu ' + filename, 'ok');
+      const r = await nb().saveFile(filename, blob, mode);
+      if (r === 'saved' || r === 'opened') toast('Đã lưu vào ' + await nb().where(), 'ok', 4000);
       return true;
-    } catch (e) { if (!/cancel/i.test(e.message || '')) toast('Không lưu được: ' + e.message, 'error'); return false; }
+    } catch (e) { if (!/cancel/i.test(e.message || '')) toast('Không lưu được: ' + (e.message || e), 'error'); return false; }
   }
   try {
     const file = new File([blob], filename, { type: mime });
@@ -127,12 +140,12 @@ export async function saveFile(filename, content, mime = 'text/plain') {
   return true;
 }
 export async function shareText(text, title = '') {
-  const share = plugin('Share');
   try {
-    if (share) { await share.share({ title, text, dialogTitle: 'Chia sẻ' }); return true; }
+    if (isNative()) { await nb().shareText(text, title); return true; }
     if (navigator.share) { await navigator.share({ title, text }); return true; }
   } catch (e) { if (e.name === 'AbortError' || /cancel/i.test(e.message || '')) return false; }
-  try { await navigator.clipboard.writeText(text); toast('Đã sao chép vào bộ nhớ tạm', 'ok'); } catch (e) { modal({ title: 'Sao chép nội dung', body: h('textarea', { class: 'textarea', style: { height: '260px' }, value: text }) }); }
+  try { await navigator.clipboard.writeText(text); toast('Đã sao chép vào bộ nhớ tạm', 'ok'); }
+  catch (e) { modal({ title: 'Sao chép nội dung', body: h('textarea', { class: 'textarea', style: { height: '260px' }, value: text }) }); }
   return false;
 }
 export function pickFile(accept) {
@@ -157,17 +170,36 @@ export function resizeImage(file, max = 240) {
   });
 }
 
+/* ---------- Thiết bị Android ---------- */
+/** Tăng sáng màn hình khi phóng to mã QR thanh toán; restore trả lại như cũ. */
+export const boostBrightness = () => { try { if (nb()) nb().brightness.boost(); } catch (e) {} };
+export const restoreBrightness = () => { try { if (nb()) nb().brightness.restore(); } catch (e) {} };
+/** Nút Back của Android: handler trả true nếu đã xử lý, false → thu nhỏ app. */
+export function onBack(handler) { try { if (nb()) nb().app.onBack(handler); } catch (e) {} }
+/** Quét máy in Bluetooth gần đó. onFound(danh sách [{name,address}]). */
+export async function scanPrinters(onFound) {
+  if (!(nb() && nb().printer)) throw new Error('Chỉ quét được máy in trong ứng dụng Android');
+  return nb().printer.scan(onFound);
+}
+
 /* ---------- In hoá đơn ---------- */
-/** In: ưu tiên máy in nhiệt Bluetooth (plugin) nếu đã ghép; ngược lại mở hộp thoại in của hệ thống. */
+/** Android: gửi ẢNH tới máy in nhiệt Bluetooth đã chọn (không in chữ vì máy in rẻ thường không có bảng mã tiếng Việt);
+    chưa chọn máy in / in lỗi → lưu ảnh PNG để gửi/in bằng app khác. Trình duyệt: hộp thoại in của hệ thống. */
 export async function printReceipt(sale) {
-  const cfg = settings().print, width = cfg.paper === 80 ? 48 : 32;
-  const tp = plugin('CapacitorThermalPrinter');
-  if (tp && isNative() && cfg.printerAddress) {
+  const cfg = settings().print;
+  if (isNative()) {
     try {
-      await tp.begin().connect({ address: cfg.printerAddress });
-      await tp.begin().align('left').text(receiptThermal(sale, width) + '\n\n\n').cutPaper().write().then(() => tp.disconnect());
-      return true;
-    } catch (e) { toast('Không in được qua Bluetooth (' + (e.message || e) + '). Mở in hệ thống…', 'error'); }
+      const img = await renderSale(sale, cfg.paper);
+      if (cfg.printerAddress && nb().printer) {
+        try {
+          toast('Đang in hoá đơn…');
+          await nb().printer.printImage(img.dataUrl, (PAPER[cfg.paper] || PAPER[58]).mm, cfg.printerAddress);
+          toast('Đã gửi hoá đơn tới máy in', 'ok');
+          return true;
+        } catch (e) { toast('Không in được (' + (e.message || e) + '). Kiểm tra máy in đã bật và ghép đôi Bluetooth. Đang lưu hoá đơn thành ảnh…', 'error', 5000); }
+      }
+      return saveFile('hoa-don-' + String(sale.code).replace(/[^\w-]+/g, '') + '.png', img.blob, 'image/png');
+    } catch (e) { toast('Không tạo được hoá đơn: ' + (e.message || e), 'error'); return false; }
   }
   return printHtml(receiptHtml(sale, cfg.paper));
 }

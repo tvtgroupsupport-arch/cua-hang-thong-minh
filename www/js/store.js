@@ -194,7 +194,7 @@ export const S = {
       if (v === undefined || v === null) dels.push(key); else puts.push([key, v]);
     }
     this.flushing = this.adapter.write(puts, dels).then(() => { this.persistError = null; })
-      .catch(e => { this.persistError = e; keys.forEach(k => this.dirty.add(k)); console.error('Lỗi ghi dữ liệu', e); })
+      .catch(e => { this.persistError = e; keys.forEach(k => this.dirty.add(k)); console.error('Lỗi ghi dữ liệu', e); this._emit(); setTimeout(() => this._schedule(), 5000); })
       .finally(() => { this.flushing = null; });
     await this.flushing;
   },
