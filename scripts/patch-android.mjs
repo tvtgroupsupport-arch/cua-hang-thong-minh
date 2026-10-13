@@ -43,9 +43,10 @@ const varsFile = path.join(ROOT, 'android/variables.gradle');
 if (fs.existsSync(varsFile)) {
   let v = fs.readFileSync(varsFile, 'utf8');
   for (const [key, min] of [['targetSdkVersion', 36], ['minSdkVersion', 24]]) {
-    const m = v.match(new RegExp(key + '\s*=\s*(\d+)'));
-    if (!m) throw new Error(`variables.gradle không có ${key} — cấu trúc Capacitor đã đổi, cần xem lại script này.`);
-    if (Number(m[1]) < min) { v = v.replace(new RegExp(key + '\s*=\s*\d+'), `${key} = ${min}`); console.log(`✓ Đã nâng ${key} ${m[1]} → ${min}`); }
+    const re = key === 'targetSdkVersion' ? /targetSdkVersion\s*=\s*(\d+)/ : /minSdkVersion\s*=\s*(\d+)/;
+    const m = v.match(re);
+    if (!m) { console.log('::warning title=variables.gradle thiếu ' + key + '::' + v.replace(/\r?\n/g, ' | ').slice(0, 600)); continue; }   // không làm hỏng bản debug; in nội dung để chẩn đoán
+    if (Number(m[1]) < min) { v = v.replace(re, key + ' = ' + min); console.log('✓ Đã nâng ' + key + ' ' + m[1] + ' → ' + min); }
   }
   fs.writeFileSync(varsFile, v);
-}
+} else console.log('::warning title=Không có android/variables.gradle::' + fs.readdirSync(path.join(ROOT, 'android')).join(', '));
