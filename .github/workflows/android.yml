@@ -1,6 +1,7 @@
 name: Build APK Android
 
 # Chạy tay: tab Actions → "Build APK Android" → Run workflow. Tải app-debug.apk ở mục Artifacts.
+# Mỗi bước quan trọng ghi 900 ký tự cuối của log vào "annotation" khi lỗi (đọc được công khai qua API, không cần quyền admin để xem log đầy đủ).
 on:
   workflow_dispatch:
   push:
@@ -21,13 +22,27 @@ jobs:
         run: npm run build
       - name: Thêm nền tảng Android
         run: test -d android || npx cap add android
-      - name: Đồng bộ giao diện + vá AndroidManifest/phiên bản
-        run: npm run sync
+      - name: Đồng bộ giao diện vào Android (cap sync)
+        run: |
+          set +e
+          npx cap sync android > /tmp/step.log 2>&1; rc=$?
+          cat /tmp/step.log
+          if [ $rc -ne 0 ]; then echo "::error title=cap sync lỗi::$(tail -c 900 /tmp/step.log | tr '\n' '|' | tr -d '%\r')"; exit $rc; fi
+      - name: Vá AndroidManifest / phiên bản
         env:
           GITHUB_RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          set +e
+          node scripts/patch-android.mjs > /tmp/step.log 2>&1; rc=$?
+          cat /tmp/step.log
+          if [ $rc -ne 0 ]; then echo "::error title=patch-android lỗi::$(tail -c 900 /tmp/step.log | tr '\n' '|' | tr -d '%\r')"; exit $rc; fi
       - name: Biên dịch APK (debug — cài thẳng được lên điện thoại)
         working-directory: android
-        run: ./gradlew assembleDebug --no-daemon
+        run: |
+          set +e
+          ./gradlew assembleDebug --no-daemon > /tmp/step.log 2>&1; rc=$?
+          tail -n 120 /tmp/step.log
+          if [ $rc -ne 0 ]; then echo "::error title=gradle lỗi::$(grep -E 'error|Error|FAILED|What went wrong|Could not|> ' /tmp/step.log | head -c 900 | tr '\n' '|' | tr -d '%\r')"; exit $rc; fi
       - uses: actions/upload-artifact@v4
         with:
           name: tap-hoa-apk
