@@ -1,0 +1,13 @@
+{
+  "name": "Tạp Hóa – Quản lý cửa hàng",
+  "short_name": "Tạp Hóa",
+  "description": "Bán hàng, kho, công nợ và báo cáo cho cửa hàng tạp hóa — chạy offline",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#101612",
+  "theme_color": "#15803d",
+  "lang": "vi",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}
