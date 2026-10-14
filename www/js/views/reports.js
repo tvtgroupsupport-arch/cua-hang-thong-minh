@@ -20,10 +20,35 @@ export function viewReports(root, ctx) {
   mount(root, tabsBox, body); draw();
 }
 
-function barChart(points, { value, label, highlight, fmt = v => fmtMoney(v) }) {
-  const max = Math.max(1, ...points.map(p => value(p)));
-  return h('div', null, h('div', { class: 'chart' }, points.map(p => h('div', { class: 'b' + (highlight && highlight(p) ? ' today' : ''), title: `${label(p)}: ${fmt(value(p))}`, style: { height: Math.max(2, value(p) / max * 100) + '%' } }))),
-    h('div', { class: 'chart-lbl' }, points.map((p, i) => h('span', null, points.length > 16 && i % Math.ceil(points.length / 8) ? '' : label(p)))));
+/** Số tiền rút gọn cho nhãn trên cột: 1,2tr / 850k / 1,5 tỷ. */
+const fmtShort = n => { const a = Math.abs(n), s = n < 0 ? '-' : ''; if (a >= 1e9) return s + (a / 1e9).toFixed(1).replace(/\.0$/, '').replace('.', ',') + ' tỷ'; if (a >= 1e6) return s + (a / 1e6).toFixed(1).replace(/\.0$/, '').replace('.', ',') + 'tr'; if (a >= 1e3) return s + Math.round(a / 1e3) + 'k'; return s + Math.round(a); };
+
+/** Biểu đồ cột có thông tin NGAY DƯỚI biểu đồ: số liệu trên đầu cột (khi ít cột), nhãn trục ngay dưới, và khung chi tiết của cột đang chọn
+    (chạm hoặc kéo ngang trên biểu đồ để xem từng cột). detail(p) → [[nhãn, giá trị], …]; title(p) → tiêu đề khung chi tiết. */
+function barChart(points, { value, label, highlight, title, detail, fmt = v => fmtMoney(v) }) {
+  const n = points.length, max = Math.max(1, ...points.map(p => value(p)));
+  let sel = Math.max(0, points.findIndex(p => highlight && highlight(p)));
+  if (sel === 0 && !(highlight && points[0] && highlight(points[0]))) sel = Math.max(0, n - 1);
+  const bars = points.map(p => h('div', { class: 'bcol' },
+    h('div', { class: 'b' + (highlight && highlight(p) ? ' today' : ''), style: { height: Math.max(2, value(p) / max * 100) + '%' } }, n <= 10 && value(p) ? h('span', { class: 'bv' }, fmtShort(value(p))) : null)));
+  const step = n <= 12 ? 1 : Math.ceil(n / 8);
+  const axis = points.map((p, i) => h('span', null, (i % step === 0 || (i === n - 1 && (n - 1) % step >= Math.ceil(step / 2))) ? label(p) : ''));
+  const readout = h('div', { class: 'readout' });
+  const chart = h('div', { class: 'chart2' }, ...bars);
+  const draw = () => {
+    bars.forEach((b, i) => b.classList.toggle('sel', i === sel));
+    axis.forEach((a, i) => a.classList.toggle('sel', i === sel));
+    const p = points[sel]; if (!p) { mount(readout, h('div', { class: 'muted small' }, 'Chưa có dữ liệu')); return; }
+    mount(readout, h('div', { class: 'row between' }, h('div', { class: 'bold' }, title ? title(p) : label(p)), h('div', { class: 'ro-v' }, fmt(value(p)))),
+      detail ? h('div', { class: 'ro-pills' }, detail(p).map(([k, v]) => h('span', { class: 'ro-pill' }, h('i', null, k), v))) : null);
+  };
+  const pick = ev => { const r = chart.getBoundingClientRect(), i = Math.min(n - 1, Math.max(0, Math.floor((ev.clientX - r.left) / r.width * n))); if (i !== sel) { sel = i; draw(); } };
+  chart.addEventListener('pointerdown', e => { pick(e); chart.setPointerCapture && chart.setPointerCapture(e.pointerId); chart._drag = true; });
+  chart.addEventListener('pointermove', e => { if (chart._drag) pick(e); });
+  const end = () => { chart._drag = false; };
+  chart.addEventListener('pointerup', end); chart.addEventListener('pointercancel', end);
+  draw();
+  return h('div', { class: 'chartbox' }, chart, h('div', { class: 'chart-lbl2' }, ...axis), readout);
 }
 const delta = (a, b) => b ? ((a - b) / b * 100) : null;
 const deltaBadge = (a, b) => { const d = delta(a, b); return d == null ? null : badge((d >= 0 ? '▲ ' : '▼ ') + Math.abs(Math.round(d)) + '%', d >= 0 ? 'green' : 'red'); };
@@ -40,7 +65,7 @@ function overview(ctx) {
       viewCost() ? h('div', { class: 'stat' }, h('div', { class: 'k' }, 'Lợi nhuận gộp hôm nay'), h('div', { class: 'v pos-c' }, fmtMoney(t.grossProfit)), h('div', { class: 's' }, `Biên ${Math.round(t.margin * 100)}% · hôm qua ${fmtMoney(y.grossProfit)}`)) : stat('Giá trị TB/hoá đơn', fmtMoney(t.avgBill)),
       stat('Tiền mặt hôm nay', fmtMoney(t.pay.cash), `Chuyển khoản ${fmtMoney(t.pay.bank)} · Ghi nợ ${fmtMoney(t.pay.debt)}`),
       stat('Doanh thu tháng này', fmtMoney(d.month.revenue), viewCost() ? `Lãi ròng ước tính ${fmtMoney(d.month.netProfit)}` : `${d.month.bills} hoá đơn`)),
-    h('div', { class: 'card' }, h('h3', null, 'Doanh thu 7 ngày'), barChart(d.week.points, { value: p => p.revenue, label: dayLbl, highlight: p => p.key === todayKey })),
+    h('div', { class: 'card' }, h('h3', null, 'Doanh thu 7 ngày'), barChart(d.week.points, { value: p => p.revenue, label: dayLbl, highlight: p => p.key === todayKey, title: p => 'Ngày ' + dayLbl(p) + (p.key === todayKey ? ' (hôm nay)' : ''), detail: p => [['Hoá đơn', p.bills], ...(viewCost() ? [['Lãi gộp', fmtMoney(p.profit)]] : [])] })),
     h('div', { class: 'grid g2 mt12' },
       h('a', { class: 'stat', href: '#/stock', style: { textDecoration: 'none', color: 'inherit' } }, h('div', { class: 'k' }, 'Cảnh báo kho'), h('div', { class: 'v ' + (d.alerts.out + d.alerts.low + d.alerts.expired ? 'warn-c' : '') }, d.alerts.out + d.alerts.low + d.alerts.expiring + d.alerts.expired),
         h('div', { class: 's' }, `Hết ${d.alerts.out} · sắp hết ${d.alerts.low} · sắp hết hạn ${d.alerts.expiring} · quá hạn ${d.alerts.expired}`)),
@@ -60,10 +85,11 @@ function revenueTab() {
       viewCost() ? stat('Lợi nhuận gộp', fmtMoney(m.grossProfit), `Biên ${Math.round(m.margin * 100)}% · giá vốn ${fmtMoney(m.cogs)}`, 'pos-c') : null,
       viewCost() ? stat('Lãi ròng ước tính', fmtMoney(m.netProfit), 'Sau chi phí, hao hụt', m.netProfit < 0 ? 'neg-c' : 'pos-c') : null,
       stat('Giảm giá đã cho', fmtMoney(m.discount)), stat('Hàng trả lại', fmtMoney(m.returns))),
-    h('div', { class: 'card' }, h('h3', null, s.monthly ? 'Doanh thu theo tháng' : 'Doanh thu theo ngày'), barChart(s.points, { value: p => p.revenue, label: lbl })),
+    h('div', { class: 'card' }, h('h3', null, s.monthly ? 'Doanh thu theo tháng' : 'Doanh thu theo ngày'), barChart(s.points, { value: p => p.revenue, label: lbl, title: p => (s.monthly ? 'Tháng ' : 'Ngày ') + lbl(p), detail: p => [['Hoá đơn', p.bills], ['TB/hoá đơn', fmtMoney(p.bills ? Math.round(p.revenue / p.bills) : 0)], ...(viewCost() ? [['Lãi gộp', fmtMoney(p.profit)]] : [])] })),
+    h('div', { class: 'card' }, h('h3', null, s.monthly ? 'Chi tiết từng tháng' : 'Chi tiết từng ngày'), h('div', { class: 'scroll-x', style: { maxHeight: '300px', overflowY: 'auto' } }, h('table', { class: 'tbl' }, h('thead', null, h('tr', null, h('th', null, s.monthly ? 'Tháng' : 'Ngày'), h('th', { class: 'r' }, 'HĐ'), h('th', { class: 'r' }, 'Doanh thu'), viewCost() ? h('th', { class: 'r' }, 'Lãi gộp') : null)), h('tbody', null, s.points.slice().reverse().map(p => h('tr', null, h('td', null, lbl(p)), h('td', { class: 'r' }, p.bills), h('td', { class: 'r' }, fmtMoney(p.revenue)), viewCost() ? h('td', { class: 'r' }, fmtMoney(p.profit)) : null)))))),
     h('div', { class: 'card' }, h('h3', null, 'Hình thức thanh toán'),
       ['cash', 'bank', 'debt'].map(k => { const v = m.pay[k], tot = m.pay.cash + m.pay.bank + m.pay.debt || 1; return h('div', { class: 'mb8' }, h('div', { class: 'row between small' }, h('span', null, { cash: 'Tiền mặt', bank: 'Chuyển khoản / VietQR', debt: 'Ghi nợ' }[k]), h('b', null, fmtMoney(v))), h('div', { class: 'bar' }, h('i', { style: { width: v / tot * 100 + '%' } }))); })),
-    h('div', { class: 'card' }, h('h3', null, 'Giờ cao điểm'), barChart(hours, { value: p => p.revenue, label: p => p.hour % 3 ? '' : p.hour + 'h', fmt: v => fmtMoney(v) })),
+    h('div', { class: 'card' }, h('h3', null, 'Giờ cao điểm'), barChart(hours, { value: p => p.revenue, label: p => p.hour % 3 ? '' : p.hour + 'h', title: p => String(p.hour).padStart(2, '0') + ':00 – ' + String(p.hour + 1).padStart(2, '0') + ':00', detail: p => [['Hoá đơn', p.bills]] })),
     viewCost() || true ? h('div', { class: 'card' }, h('h3', null, 'Theo thu ngân'), staff.length ? h('div', { class: 'scroll-x' }, h('table', { class: 'tbl' }, h('thead', null, h('tr', null, h('th', null, 'Nhân viên'), h('th', { class: 'r' }, 'HĐ'), h('th', { class: 'r' }, 'Doanh thu'), viewCost() ? h('th', { class: 'r' }, 'Lãi gộp') : null)),
       h('tbody', null, staff.map(r => h('tr', null, h('td', null, r.name), h('td', { class: 'r' }, r.bills), h('td', { class: 'r' }, fmtMoney(r.revenue)), viewCost() ? h('td', { class: 'r' }, fmtMoney(r.profit)) : null))))) : empty('Chưa có dữ liệu')) : null,
     viewCost() ? h('div', { class: 'card' }, h('h3', null, 'Kết quả kinh doanh (ước tính)'), kv('Doanh thu thuần', fmtMoney(m.revenue)), kv('Giá vốn hàng bán', '-' + fmtMoney(m.cogs)), kv('Lợi nhuận gộp', fmtMoney(m.grossProfit), 'bold'), kv('Chi phí hoạt động (sổ quỹ)', '-' + fmtMoney(m.expenses)),

@@ -1,15 +1,14 @@
 /* Cài đặt cửa hàng, sao lưu/khôi phục, nhân viên & quyền, nhật ký. */
 import { S } from '../store.js';
 import * as E from '../engine/index.js';
-import { h, icon, iconBtn, mount, modal, toast, guard, confirmBox, promptBox, field, select, checkbox, badge, kv, empty, moneyInput, qtyInput, alertBox } from '../ui.js';
-import { fmtMoney, fmtNum, fmtDateTime, parseQty, ymd } from '../util.js';
+import { h, icon, iconBtn, mount, modal, toast, guard, confirmBox, promptBox, field, select, checkbox, badge, kv, empty, moneyInput, qtyInput, alertBox, pickFromList, tint } from '../ui.js';
+import { fmtMoney, fmtNum, fmtDateTime, parseQty, ymd, norm } from '../util.js';
 import { saveFile, pickFile, readFileText, isNative, scanPrinters, printReceipt } from '../native.js';
 import { getTheme, setTheme, getAccent, setAccent, ACCENTS } from '../theme.js';
 import { QR } from '../lib/qr.js';
+import { getBanks, banksSource, banksLoading, loadBanksLive, bankName } from '../lib/banks.js';
 import { VietQR } from '../lib/vietqr.js';
 
-const BANKS = [['970436', 'Vietcombank'], ['970415', 'VietinBank'], ['970418', 'BIDV'], ['970405', 'Agribank'], ['970407', 'Techcombank'], ['970422', 'MB Bank'], ['970416', 'ACB'], ['970432', 'VPBank'], ['970423', 'TPBank'],
-  ['970403', 'Sacombank'], ['970437', 'HDBank'], ['970441', 'VIB'], ['970443', 'SHB'], ['970448', 'OCB'], ['970426', 'MSB'], ['970440', 'SeABank'], ['970431', 'Eximbank'], ['970449', 'LPBank'], ['970454', 'VietCapital'], ['970429', 'SCB'], ['963388', 'Timo'], ['546034', 'Cake'], ['546035', 'Ubank']];
 
 export function viewSettings(root, ctx) {
   const st = E.settings();
@@ -33,12 +32,27 @@ export function viewSettings(root, ctx) {
 
   /* ---- Thanh toán / VietQR ---- */
   const bank = st.bank;
-  const known = BANKS.some(([b]) => b === bank.bin);
-  const b = { bank: select([['', '— Chọn ngân hàng —'], ...BANKS, ['other', 'Ngân hàng khác (nhập mã BIN)']], known ? bank.bin : (bank.bin ? 'other' : '')), bin: h('input', { class: 'input', value: known ? '' : bank.bin, inputMode: 'numeric', placeholder: 'Mã BIN 6 số' }), acc: h('input', { class: 'input', value: bank.account, inputMode: 'numeric', placeholder: 'Số tài khoản' }), name: h('input', { class: 'input', value: bank.name, placeholder: 'Tên chủ tài khoản (hiện cho khách)' }) };
+  let binSel = getBanks().some(x => x.bin === bank.bin) ? bank.bin : (bank.bin ? 'other' : '');
+  const bankBtn = h('button', { class: 'btn block', style: { justifyContent: 'space-between', fontWeight: 600 }, onClick: () => chooseBank() }), bankNote = h('div', { class: 'hint small row', style: { gap: '8px' } });
+  const b = { bank: { get value() { return binSel; } }, bin: h('input', { class: 'input', value: binSel === 'other' ? bank.bin : '', inputMode: 'numeric', placeholder: 'Mã BIN 6 số' }), acc: h('input', { class: 'input', value: bank.account, inputMode: 'numeric', placeholder: 'Số tài khoản' }), name: h('input', { class: 'input', value: bank.name, placeholder: 'Tên chủ tài khoản (hiện cho khách)' }) };
+  const drawBank = () => {
+    const src = banksSource(), n = getBanks().length;
+    mount(bankBtn, h('span', null, binSel === 'other' ? 'Ngân hàng khác (nhập mã BIN)' : binSel ? (bankName(binSel) || binSel) + ' · ' + binSel : '— Chọn ngân hàng —'), icon('chevron', 18));
+    mount(bankNote, h('span', { class: 'grow' }, banksLoading() ? 'Đang tải danh sách đầy đủ từ VietQR…' : src === 'live' ? `✓ Danh sách đầy đủ (${n} ngân hàng, tải trực tiếp từ VietQR)` : src === 'cached' ? `Danh sách đã lưu (${n} ngân hàng) — có mạng sẽ tự cập nhật` : `Danh sách rút gọn (${n} ngân hàng). Cần mạng để tải đầy đủ.`),
+      src !== 'live' && !banksLoading() ? h('button', { class: 'btn sm ghost', onClick: async () => { await loadBanksLive({ retry: true }); drawBank(); } }, 'Thử lại') : null);
+    const bf = document.getElementById('binf'); if (bf) bf.style.display = binSel === 'other' ? '' : 'none';
+  };
+  async function chooseBank() {
+    const items = [...getBanks(), { bin: 'other', name: 'Ngân hàng khác (nhập mã BIN)' }];
+    const r = await pickFromList({ title: 'Chọn ngân hàng', items, searchPlaceholder: 'Tìm tên ngân hàng hoặc mã BIN…', limit: 200, match: (x, qn) => norm(x.name).includes(norm(qn)) || x.bin.includes(qn),
+      render: x => [h('div', { class: 'thumb ' + tint(x.name) }, x.name.slice(0, 1).toUpperCase()), h('div', { class: 'grow' }, h('div', { class: 'ttl' }, x.name), h('div', { class: 'sub' }, x.bin === 'other' ? 'Tự nhập mã BIN 6 số' : 'BIN ' + x.bin)), x.bin === binSel ? icon('check', 20) : null] });
+    if (r) { binSel = r.bin; drawBank(); }
+  }
+  loadBanksLive().then(drawBank);
   const qrPrev = h('div');
-  const payCard = h('div', { class: 'card' }, h('h3', null, 'Tài khoản nhận tiền (VietQR)'), field('Ngân hàng', b.bank), h('div', { id: 'binf' }, field('Mã BIN ngân hàng', b.bin, 'Tra mã BIN trên vietqr.io. Kiểm tra bằng cách quét thử mã QR bên dưới.')), field('Số tài khoản', b.acc), field('Tên chủ tài khoản', b.name),
+  const payCard = h('div', { class: 'card' }, h('h3', null, 'Tài khoản nhận tiền (VietQR)'), field('Ngân hàng', h('div', null, bankBtn, bankNote)), h('div', { id: 'binf' }, field('Mã BIN ngân hàng', b.bin, 'Tra mã BIN trên vietqr.io. Kiểm tra bằng cách quét thử mã QR bên dưới.')), field('Số tài khoản', b.acc), field('Tên chủ tài khoản', b.name),
     h('div', { class: 'row' }, h('button', { class: 'btn primary', onClick: async () => { const bin = b.bank.value === 'other' ? b.bin.value.trim() : b.bank.value; const r = await save({ bank: { bin, account: b.acc.value.trim(), name: b.name.value.trim() } }); if (r) preview(); } }, 'Lưu'), h('button', { class: 'btn', onClick: preview }, 'Xem thử mã QR')), qrPrev);
-  const toggleBin = () => { document.getElementById('binf') && (document.getElementById('binf').style.display = b.bank.value === 'other' ? '' : 'none'); }; b.bank.addEventListener('change', toggleBin);
+  drawBank();
   function preview() {
     const bin = b.bank.value === 'other' ? b.bin.value.trim() : b.bank.value;
     try { const svg = QR.svg(VietQR.payload({ bin, account: b.acc.value, amount: 10000, info: 'Thu nghiem' })); mount(qrPrev, h('div', { class: 'qr-box', style: { width: '200px' }, html: svg }), h('div', { class: 'small muted center' }, 'Mã thử 10.000đ – quét bằng app ngân hàng để kiểm tra đúng tài khoản. Không cần chuyển tiền.')); }
@@ -120,7 +134,6 @@ export function viewSettings(root, ctx) {
 
   const cards = owner ? [storeCard, saleCard, payCard, printCard, stockCard, themeCard, backupCard, pwCard, dataCard] : [themeCard, pwCard];
   mount(root, ...cards.filter(Boolean));
-  toggleBin();
 }
 
 /* ======================= Nhân viên & quyền ======================= */

@@ -183,7 +183,7 @@ export function checkbox(label, checked, onChange) {
   w.input = i; return w;
 }
 export function tabs(items, active, onPick) {
-  const el = h('div', { class: 'tabs' }, items.map(([k, l]) => h('button', { class: k === active ? 'on' : '', onClick: () => onPick(k) }, l)));
+  const el = h('div', { class: 'tabs', 'data-swipe': 'tabs' }, items.map(([k, l]) => h('button', { class: k === active ? 'on' : '', onClick: () => onPick(k) }, l)));
   return el;
 }
 export const empty = (text, sub) => h('div', { class: 'empty' }, h('div', null, text), sub ? h('div', { class: 'small', style: { marginTop: '4px' } }, sub) : null);
@@ -214,3 +214,51 @@ export function debounce(fn, ms = 200) { let t; return (...a) => { clearTimeout(
 
 /** Màu nhạt cố định theo chuỗi (tên hàng/khách) → class t0..t7 cho ô thumb, để danh sách sinh động mà vẫn nhất quán. */
 export function tint(s) { let x = 0; for (const c of String(s || "")) x = (x * 31 + c.charCodeAt(0)) % 997; return "t" + (x % 8); }
+
+/* ---------- Vuốt ngang để đổi tab / danh mục, tab đang chọn tự cuộn ra giữa (cách làm của app BEPO) ---------- */
+function insideHScroll(el) {
+  for (let n = el; n && n !== document.body; n = n.parentElement) {
+    const o = getComputedStyle(n).overflowX;
+    if ((o === 'auto' || o === 'scroll') && n.scrollWidth > n.clientWidth + 2) return true;
+  }
+  return false;
+}
+/** Đưa phần tử đang chọn ra giữa thanh cuộn ngang của nó. */
+export function centerIn(box, el, smooth) {
+  if (!box || !el || box.scrollWidth <= box.clientWidth + 2) return;
+  const br = box.getBoundingClientRect(), er = el.getBoundingClientRect();
+  box.scrollTo({ left: Math.max(0, box.scrollLeft + (er.left - br.left) - (br.width - er.width) / 2), behavior: smooth ? 'smooth' : 'auto' });
+}
+/** Lắp một lần: vuốt trái/phải trên màn hình hoặc hộp thoại → chuyển sang tab/danh mục kế bên (phần tử có data-swipe, mục con là .tabs button hoặc [data-sw]).
+    Không bắt cử chỉ khi đang vuốt trong vùng tự cuộn ngang (bảng, thanh chip, biểu đồ cuộn), ô nhập, hay trang giỏ hàng. */
+export function installSwipe() {
+  let x0 = null, y0 = null, start = null;
+  document.addEventListener('touchstart', e => { if (e.touches.length !== 1) { x0 = null; return; } start = e.target; x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; }, { passive: true });
+  document.addEventListener('touchend', e => {
+    if (x0 === null || !start) return;
+    const dx = e.changedTouches[0].clientX - x0, dy = e.changedTouches[0].clientY - y0; x0 = null;
+    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.6) return;               // phải là vuốt ngang đủ xa, không phải cuộn dọc
+    if (/^(input|textarea|select)$/i.test(start.tagName) || start.closest('.cartpage, .scanner') || insideHScroll(start)) return;
+    const ov = document.querySelectorAll('.overlay'), scope = ov.length ? ov[ov.length - 1].querySelector('.body') : document.querySelector('.main');
+    const set = scope && scope.querySelector('[data-swipe]'); if (!set) return;
+    const items = Array.from(set.children).filter(c => set.classList.contains('tabs') ? c.tagName === 'BUTTON' : c.hasAttribute('data-sw'));
+    const cur = items.findIndex(c => c.classList.contains('on')), next = cur + (dx < 0 ? 1 : -1);
+    if (cur < 0 || next < 0 || next >= items.length) return;
+    items[next].click();
+    try { scope.animate([{ transform: `translateX(${dx < 0 ? 28 : -28}px)`, opacity: .35 }, { transform: 'none', opacity: 1 }], { duration: 200, easing: 'ease-out' }); } catch (e) {}
+  }, { passive: true });
+}
+/** Lắp một lần: mỗi khi giao diện đổi, tab/chip đang chọn của thanh cuộn ngang được kéo ra giữa (nhảy ngay nếu thanh mới dựng, trượt mượt nếu đổi tab trên thanh đang có). */
+export function installAutoCenter() {
+  const last = new WeakMap();
+  let queued = false;
+  const scan = () => {
+    queued = false;
+    document.querySelectorAll('.tabs, .chips, .seg').forEach(box => {
+      const on = box.querySelector('.on'); if (!on) return;
+      const prev = last.get(box); if (prev === on) return;
+      last.set(box, on); centerIn(box, on, !!(prev && prev.isConnected));
+    });
+  };
+  new MutationObserver(() => { if (!queued) { queued = true; requestAnimationFrame(scan); } }).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+}

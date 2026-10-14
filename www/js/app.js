@@ -1,7 +1,7 @@
 /* Khởi động, điều hướng (hash router), khung ứng dụng. */
 import { S, idbAdapter, memoryAdapter } from './store.js';
 import * as E from './engine/index.js';
-import { h, icon, mount, toast, debounce } from './ui.js';
+import { h, icon, mount, toast, debounce, installSwipe, installAutoCenter } from './ui.js';
 import { applyTheme, lsGet, lsSet } from './theme.js';
 import { loadNativeBridge, onBack, isNative } from './native.js';
 import { viewLogin } from './views/login.js';
@@ -146,6 +146,7 @@ async function boot() {
     if (S.persistError && Date.now() - lastPersistWarn > 30000) { lastPersistWarn = Date.now(); toast('CẢNH BÁO: không ghi được dữ liệu vào bộ nhớ (' + (S.persistError.message || 'lỗi') + '). Hãy sao lưu ngay!', 'error', 10000); }
   }, 500));
   onBack(handleBack);
+  installSwipe(); installAutoCenter();
   window.__app = { S, E, go };
   const native = isNative();
   if ('serviceWorker' in navigator && /^https?:/.test(location.protocol) && !native) navigator.serviceWorker.register('sw.js').catch(() => {});

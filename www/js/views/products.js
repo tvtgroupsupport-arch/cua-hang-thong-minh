@@ -22,9 +22,9 @@ export function viewProducts(root, ctx) {
 
   function draw() {
     const cats = E.categoryTree().filter(x => x.depth === 0);
-    mount(chipsBox, h('div', { class: 'chips' }, h('span', { class: 'chip ' + (!catId && !onlyLow ? 'on' : ''), onClick: () => { catId = ''; onlyLow = false; draw(); } }, 'Tất cả'),
+    mount(chipsBox, h('div', { class: 'chips', 'data-swipe': 'chips' }, h('span', { class: 'chip ' + (!catId && !onlyLow ? 'on' : ''), 'data-sw': '', onClick: () => { catId = ''; onlyLow = false; draw(); } }, 'Tất cả'),
       h('span', { class: 'chip ' + (onlyLow ? 'on' : ''), onClick: () => { onlyLow = !onlyLow; draw(); } }, '⚠ Sắp hết'),
-      cats.map(({ cat }) => h('span', { class: 'chip ' + (catId === cat.id ? 'on' : ''), onClick: () => { catId = catId === cat.id ? '' : cat.id; draw(); } }, cat.name)),
+      cats.map(({ cat }) => h('span', { class: 'chip ' + (catId === cat.id ? 'on' : ''), 'data-sw': '', onClick: () => { catId = catId === cat.id ? '' : cat.id; draw(); } }, cat.name)),
       h('span', { class: 'chip ' + (showInactive ? 'on' : ''), onClick: () => { showInactive = !showInactive; draw(); } }, 'Ngừng bán')));
     let list = E.searchProducts(q, { categoryId: catId || undefined, activeOnly: !showInactive, onlyLow, limit: 100000 });
     if (showInactive) list = list.filter(p => !p.active);

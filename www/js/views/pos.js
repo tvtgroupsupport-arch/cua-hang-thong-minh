@@ -30,7 +30,7 @@ function quickProducts() {
 export function viewPos(root, ctx) {
   let calc = null, quickCat = '', q = '', cartOpen = false, allLimit = 120;
   const searchInput = h('input', { class: 'input', placeholder: 'Quét mã vạch hoặc gõ tên hàng…', autocomplete: 'off', enterkeyhint: 'search' });
-  const chipsBox = h('div', { class: 'chips pos-chips' });
+  const chipsBox = h('div', { class: 'chips pos-chips', 'data-swipe': 'chips' });
   const gridBox = h('div', { class: 'pos-grid' });
   const cartBar = h('button', { class: 'cartbar hide', onClick: () => openCart() });
   const cartBox = h('div', { class: 'pos-cart' });
@@ -178,7 +178,7 @@ export function viewPos(root, ctx) {
   }
   function renderCatalog() {
     const cats = E.categoryTree().filter(x => x.depth === 0);
-    const chip = (key, label) => h('span', { class: 'chip ' + (!q && quickCat === key ? 'on' : ''), onClick: () => { quickCat = key; allLimit = 120; if (q) { searchInput.value = ''; q = ''; } renderCatalog(); } }, label);
+    const chip = (key, label) => h('span', { class: 'chip ' + (!q && quickCat === key ? 'on' : ''), 'data-sw': '', onClick: () => { quickCat = key; allLimit = 120; if (q) { searchInput.value = ''; q = ''; } renderCatalog(); } }, label);
     mount(chipsBox, chip('', 'Hay bán'), chip('*', 'Tất cả'), cats.map(({ cat }) => chip(cat.id, cat.name)));
     const list = catalogList();
     tiles.clear();

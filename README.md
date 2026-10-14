@@ -73,3 +73,8 @@ test/                kiểm thử chạy trong trình duyệt
 
 ## Màn hình Bán hàng (bản 1.3)
 Tách riêng **danh sách sản phẩm** và **giỏ hàng**: màn hình chính dành gần trọn cho lưới sản phẩm (Hay bán / Tất cả / theo nhóm, tìm kiếm lọc ngay trên lưới, mỗi ô hiện số lượng đã chọn và nút "−" để bớt nhanh). Khi có hàng trong giỏ, một **thanh giỏ hàng** nổi ở cuối hiện số mặt hàng và tổng tiền; **chạm vào mới mở trang giỏ hàng** (khách, mã giảm giá, chỉnh số lượng/giá, giảm giá, treo đơn, thanh toán). Trên Android nút Back đóng giỏ hàng để quay lại chọn hàng; trên màn hình rộng giỏ hàng trượt ra như ngăn kéo bên phải.
+
+## Bản 1.4
+- **Vuốt ngang để chuyển tab/danh mục** (làm theo app BEPO): vuốt trái/phải trên màn hình hoặc hộp thoại để nhảy sang tab kế bên (Kho, Báo cáo, Sổ quỹ, Hoá đơn, chi tiết khách…) và đổi danh mục hàng ở màn Bán hàng/Hàng hóa. Không bắt cử chỉ khi vuốt trong bảng/thanh chip cuộn ngang, ô nhập hoặc trang giỏ hàng. Tab/danh mục đang chọn **tự cuộn ra giữa** thanh tab.
+- **Danh sách ngân hàng VietQR đầy đủ:** tải trực tiếp từ API VietQR (khoảng 47–55 ngân hàng), lưu lại để dùng offline, có danh sách rút gọn 44 ngân hàng dự phòng và nút "Thử lại"; chọn bằng hộp thoại có ô tìm theo tên/mã BIN.
+- **Biểu đồ:** số liệu hiện ngay trên đầu cột (khi ít cột), nhãn trục ngay dưới biểu đồ và một khung chi tiết đặt liền dưới biểu đồ (chạm hoặc kéo ngang để xem từng cột: doanh thu, số hoá đơn, trung bình/hoá đơn, lãi gộp); tab Doanh thu có thêm bảng chi tiết từng ngày/tháng.

@@ -252,3 +252,20 @@ body:has(.login) { background: var(--grad); }
 .qitem .n { padding-right: 0; }
 .qminus { top: auto; bottom: 6px; right: 6px; width: 26px; height: 26px; }
 .qitem.inc .tiny { visibility: hidden; }
+
+/* ---------- Biểu đồ cột: số liệu trên đầu cột, nhãn trục + khung chi tiết ngay dưới ---------- */
+.chart2 { display: flex; align-items: flex-end; gap: 5px; height: 160px; padding-top: 20px; touch-action: pan-y; cursor: pointer; user-select: none; -webkit-user-select: none; }
+.chart2 .bcol { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; min-width: 0; }
+.chart2 .b { position: relative; width: 100%; border-radius: 9px 9px 4px 4px; background: linear-gradient(180deg, var(--a1), var(--a2)); opacity: .72; transition: opacity .15s, box-shadow .15s; min-height: 3px; }
+.chart2 .b.today { background: linear-gradient(180deg, #ffb347, #ff6f6f); }
+.chart2 .b.sel { opacity: 1; box-shadow: 0 6px 16px color-mix(in srgb, var(--a2) 40%, transparent); }
+.chart2 .bv { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: 3px; font-size: 10.5px; font-weight: 750; color: var(--muted); white-space: nowrap; }
+.chart2 .b.sel .bv { color: var(--primary); }
+.chart-lbl2 { display: flex; gap: 5px; margin-top: 7px; }
+.chart-lbl2 span { flex: 1; text-align: center; font-size: 10.5px; color: var(--muted); white-space: nowrap; overflow: visible; min-width: 0; }
+.chart-lbl2 span.sel { color: var(--primary); font-weight: 800; }
+.readout { margin-top: 12px; padding: 12px 14px; border-radius: 18px; background: var(--primary-l); }
+.ro-v { font-size: 21px; font-weight: 850; color: var(--primary); letter-spacing: -.02em; }
+.ro-pills { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.ro-pill { background: var(--surface); border-radius: 99px; padding: 4px 12px; font-size: 12.5px; font-weight: 700; }
+.ro-pill i { font-style: normal; color: var(--muted); font-weight: 600; margin-right: 6px; }
