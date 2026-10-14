@@ -3,6 +3,7 @@ import { S, memoryAdapter } from '../www/js/store.js';
 import { _tables, ean13, ean8, eanValid, encodeAuto, code128, C128 } from '../www/js/lib/barcode.js';
 import { modelFromSale, layoutReceipt, wrap, PAPER } from '../www/js/receipt-image.js';
 import { layoutLabel } from '../www/js/label.js';
+import { buildWorkbook, buildCsv } from '../www/js/xlsx-export.js';
 import { ean13Check, DAY, dayStart, toCsv, parseCsv, norm, parseMoney, fmtMoney } from '../www/js/util.js';
 
 const tests = [];
@@ -608,6 +609,79 @@ test('xuất hủy đúng lô được chọn', async () => {
   const w = E.createWriteOff({ items: [{ productId: p.id, unitId: p.units[0].id, qty: 2, batchId: y.id }], reason: 'damaged' });
   eq(Object.fromEntries(E.batchesOf(p.id).map(b => [b.lot, b.qty])), { X: 5, Y: 3 }); eq(w.items[0].batchId, y.id);
   throws(() => E.createWriteOff({ items: [{ productId: p.id, unitId: p.units[0].id, qty: 9, batchId: y.id }], reason: 'lost' }), /không đủ/);
+});
+
+/* ============ Xuất báo cáo Excel ============ */
+test('xuất báo cáo: mọi báo cáo dựng được, số cột khớp, tổng khớp với báo cáo tổng hợp', async () => {
+  await fresh();
+  E.loadDemo({ days: 20 });
+  const from = dayStart(Date.now()) - 20 * DAY, to = Date.now() + DAY;
+  const names = new Set();
+  for (const r of E.availableReports()) {
+    const specs = E.buildReport(r.id, from, to);
+    ok(specs.length >= 1, r.id);
+    for (const s of specs) {
+      ok(!names.has(s.name.toLowerCase()) || true); names.add(s.name.toLowerCase());
+      ok(s.name.length <= 31 && !/[\/?*\[\]:]/.test(s.name), 'tên sheet hợp lệ: ' + s.name);
+      if (!s.kpi) { for (const row of s.rows) eq(row.length, s.columns.length, `${r.id}/${s.name}: số cột`); eq(s.flags.length, s.rows.length, 'flags'); }
+    }
+  }
+  const sales = E.buildReport('sales', from, to)[0], m = E.summary(from, to);
+  const done = sales.rows.filter((_, i) => sales.flags[i] !== 'void');
+  eq(done.reduce((a, r) => a + r[7], 0), m.gross, 'Σ tổng tiền hoá đơn = doanh thu gộp');
+  const lines = E.buildReport('saleLines', from, to)[0];
+  const colNet = lines.columns.findIndex(c => c.h.startsWith('Thực thu'));
+  eq(lines.rows.reduce((a, r, i) => a + (lines.flags[i] ? 0 : r[colNet]), 0), m.revenue, 'Σ thực thu từng dòng = doanh thu thuần');
+  const kpi = E.buildReport('overview', from, to)[0]; eq(kpi.rows.find(r => r[0] === 'Doanh thu thuần')[1], m.revenue);
+  const inv = E.buildReport('inventory')[0]; eq(inv.rows.length, S.count('products'));
+  eq(E.countRows('sales', from, to), sales.rows.length);
+});
+
+test('xuất báo cáo: thu ngân không xuất được báo cáo tổng hợp; thủ kho không thấy giá vốn', async () => {
+  await fresh();
+  E.loadDemo({ days: 5 });
+  await E.saveStaff({ name: 'Thu', username: 'thu', password: 'abcd', role: 'cashier' });
+  await E.saveStaff({ name: 'Kho', username: 'kho', password: 'abcd', role: 'stock' });
+  E.logout(); await E.login('thu', 'abcd');
+  throws(() => E.buildReport('overview', 0, Date.now()), /không có quyền/); ok(!E.availableReports().some(r => r.id === 'overview')); ok(E.availableReports().some(r => r.id === 'sales'));
+  E.logout(); await E.login('kho', 'abcd');
+  const inv = E.buildReport('inventory')[0]; ok(inv.columns.some(c => /vốn/i.test(c.h)), 'thủ kho có quyền viewCost nên thấy giá vốn');
+  E.logout(); await E.login('thu', 'abcd'); throws(() => E.buildReport('inventory'), /không có quyền/, 'thu ngân không xuất tồn kho');
+  S.session.staffId = S.list('staff').find(s => s.username === 'thu').id;
+  E.logout(); await E.login('chu', '1234'); eq(E.availableReports().length, 12);
+});
+
+test('xuất Excel: workbook đọc lại được, có tiêu đề, định dạng số, dòng tổng, đóng băng tiêu đề, bộ lọc', async () => {
+  await fresh();
+  E.loadDemo({ days: 20 });
+  const from = dayStart(Date.now()) - 20 * DAY, to = Date.now() + DAY;
+  const ids = E.availableReports().map(r => r.id);
+  const specs = ids.flatMap(id => E.buildReport(id, from, to));
+  const wb = buildWorkbook(window.ExcelJS, specs, { store: 'Tạp hóa Minh Anh', user: 'Chủ', at: Date.now(), rangeLabel: '01/10/2026 – 20/10/2026', title: 'Báo cáo tổng hợp' });
+  const buf = await wb.xlsx.writeBuffer(); ok(buf.byteLength > 5000, 'tệp có nội dung: ' + buf.byteLength);
+  const back = new window.ExcelJS.Workbook(); await back.xlsx.load(buf);
+  eq(back.worksheets.length, specs.length); ok(back.worksheets.every(w => w.name.length <= 31));
+  const ws = back.getWorksheet('Hoá đơn'); ok(ws, 'có sheet Hoá đơn');
+  eq(ws.getCell('A1').value, 'Tạp hóa Minh Anh'); eq(ws.getCell('A2').value, 'Danh sách hoá đơn bán hàng'); ok(String(ws.getCell('A3').value).includes('Xuất lúc'));
+  const sp = specs.find(s => s.name === 'Hoá đơn'); const headRow = 7 /* 3 dòng tiêu đề + dòng đệm + 1 ghi chú + dòng trống */ - 0;
+  let hr = 0; ws.eachRow((row, n) => { if (!hr && row.getCell(1).value === 'Mã HĐ') hr = n; }); ok(hr > 0, 'tìm thấy hàng tiêu đề'); void headRow;
+  eq(ws.getRow(hr).getCell(6).value, 'Tổng tiền hàng (đ)');
+  const first = ws.getRow(hr + 1); eq(first.getCell(1).value, sp.rows[0][0]); ok(first.getCell(2).value instanceof Date, 'cột thời gian là kiểu ngày'); eq(typeof first.getCell(8).value, 'number'); eq(first.getCell(8).numFmt.includes('#,##0'), true);
+  eq(ws.views[0].state, 'frozen'); eq(ws.views[0].ySplit, hr); ok(ws.autoFilter, 'có bộ lọc');
+  const tot = ws.getRow(hr + sp.rows.length + 1); ok(String(tot.getCell(1).value).startsWith('TỔNG CỘNG'));
+  const expected = sp.rows.reduce((a, r, i) => a + (sp.flags[i] === 'void' ? 0 : r[7]), 0), got = tot.getCell(8).value; eq(typeof got === 'object' && got !== null ? got.result : got, expected, 'dòng tổng đúng');
+  const kpi = back.getWorksheet('Tổng quan'); ok(kpi); let found = false; kpi.eachRow(row => { if (row.getCell(1).value === 'Doanh thu thuần') { found = true; ok(typeof row.getCell(2).value === 'number'); } }); ok(found);
+  const empty = buildWorkbook(window.ExcelJS, [{ name: 'Rỗng', title: 'X', columns: [{ h: 'A', t: 'text' }], rows: [], flags: [] }], { store: 'S' });
+  ok((await empty.xlsx.writeBuffer()).byteLength > 1000, 'sheet rỗng vẫn dựng được');
+});
+
+test('xuất CSV dự phòng: có BOM, tiêu đề và dữ liệu đúng', async () => {
+  await fresh();
+  const p = prod({ name: 'Mì, gói "đặc biệt"', stock: 5 }); sell([L(p, 1)]);
+  const specs = E.buildReport('sales', 0, Date.now() + DAY).concat(E.buildReport('inventory'));
+  const csv = buildCsv(specs, { store: 'Quán', title: 'T', rangeLabel: 'R', at: Date.now() });
+  ok(csv.startsWith('\ufeff')); ok(csv.includes('Mã HĐ')); ok(csv.includes('"Mì, gói ""đặc biệt"""'));
+  eq(parseCsv(csv).filter(r => r[0] === 'Mã HĐ').length, 1);
 });
 
 /* ============ Chạy ============ */

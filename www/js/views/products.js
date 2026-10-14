@@ -1,12 +1,12 @@
 /* Hàng hóa: danh sách, thêm/sửa (đa đơn vị, đa mã vạch, bậc giá, lô/HSD), nhóm hàng, đổi giá hàng loạt, nhập/xuất CSV. */
 import { S } from '../store.js';
 import * as E from '../engine/index.js';
-import { h, icon, iconBtn, mount, modal, toast, guard, confirmBox, promptBox, field, select, checkbox, badge, kv, empty, moneyInput, qtyInput, debounce, tabs } from '../ui.js';
+import { h, icon, iconBtn, mount, modal, toast, guard, confirmBox, promptBox, field, select, checkbox, badge, kv, empty, moneyInput, qtyInput, debounce, tabs, tint } from '../ui.js';
 import { fmtMoney, fmtNum, fmtDateTime, fmtDate, parseQty, parseMoney, ean13Check, ymd } from '../util.js';
 import { openScanner, onScan, canScan, saveFile, pickFile, readFileText, resizeImage } from '../native.js';
 import { labelDialog } from '../label.js';
 
-const thumb = (p, size) => h('div', { class: 'thumb', style: size ? { width: size + 'px', height: size + 'px' } : null }, p.image ? h('img', { src: p.image }) : p.name.slice(0, 1).toUpperCase());
+const thumb = (p, size) => h('div', { class: 'thumb ' + tint(p.name), style: size ? { width: size + 'px', height: size + 'px' } : null }, p.image ? h('img', { src: p.image }) : p.name.slice(0, 1).toUpperCase());
 const catOptions = () => [['', '— Chưa phân nhóm —'], ...E.categoryTree().map(({ cat, depth }) => [cat.id, '  '.repeat(depth) + cat.name])];
 
 export function viewProducts(root, ctx) {

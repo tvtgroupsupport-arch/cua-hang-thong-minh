@@ -1,7 +1,7 @@
 /* Khách hàng & nhà cung cấp: danh bạ, công nợ, thu/trả nợ, lịch sử. */
 import { S } from '../store.js';
 import * as E from '../engine/index.js';
-import { h, icon, iconBtn, mount, modal, toast, guard, confirmBox, promptBox, field, select, badge, kv, empty, moneyInput, debounce, tabs } from '../ui.js';
+import { h, icon, iconBtn, mount, modal, toast, guard, confirmBox, promptBox, field, select, badge, kv, empty, moneyInput, debounce, tabs, tint } from '../ui.js';
 import { fmtMoney, fmtNum, fmtDate, fmtDateTime, DAY, norm } from '../util.js';
 import { shareText, saveFile } from '../native.js';
 import { dueBadge } from './common.js';
@@ -25,7 +25,7 @@ function peopleView(root, ctx, kind) {
     mount(sumBox, h('div', { class: 'grid g2 mb8' }, h('div', { class: 'stat' }, h('div', { class: 'k' }, isC ? 'Khách đang nợ' : 'Đang nợ nhà cung cấp'), h('div', { class: 'v neg-c' }, fmtMoney(totalDebt)), h('div', { class: 's' }, `${S.list(coll).filter(x => x.debt > 0).length} ${noun}`)),
       h('div', { class: 'stat' }, h('div', { class: 'k' }, 'Tổng số'), h('div', { class: 'v' }, S.list(coll).filter(x => x.active !== false).length), h('div', { class: 's' }, noun))));
     mount(listBox, list.length ? h('div', { class: 'list' }, list.slice(0, 300).map(x => h('div', { class: 'item click', onClick: () => detail(x.id) },
-      h('div', { class: 'thumb' }, x.name.slice(0, 1).toUpperCase()), h('div', { class: 'grow' }, h('div', { class: 'ttl' }, x.name), h('div', { class: 'sub' }, [x.phone, isC ? E.CUSTOMER_GROUPS[x.group] : x.contact].filter(Boolean).join(' · ') || '—')),
+      h('div', { class: 'thumb ' + tint(x.name) }, x.name.slice(0, 1).toUpperCase()), h('div', { class: 'grow' }, h('div', { class: 'ttl' }, x.name), h('div', { class: 'sub' }, [x.phone, isC ? E.CUSTOMER_GROUPS[x.group] : x.contact].filter(Boolean).join(' · ') || '—')),
       x.debt > 0 ? h('div', { class: 'right' }, h('div', { class: 'bold neg-c' }, fmtMoney(x.debt)), dueBadge(E.oldestDebtAge(kind, x.id))) : x.debt < 0 ? badge('Dư ' + fmtNum(-x.debt), 'green') : null))) : empty(q || onlyDebt ? 'Không tìm thấy' : `Chưa có ${noun} nào`, canEdit ? 'Bấm + để thêm' : ''));
   }
 
@@ -62,7 +62,7 @@ function peopleView(root, ctx, kind) {
     const box = h('div'), subBox = h('div');
     const draw2 = () => {
       x = S.get(coll, id); if (!x) return;
-      mount(box, h('div', { class: 'row' }, h('div', { class: 'thumb', style: { width: '56px', height: '56px' } }, x.name.slice(0, 1).toUpperCase()), h('div', { class: 'grow' }, h('div', { class: 'bold', style: { fontSize: '17px' } }, x.name), h('div', { class: 'small muted' }, [x.phone, x.address].filter(Boolean).join(' · ') || '—')),
+      mount(box, h('div', { class: 'row' }, h('div', { class: 'thumb ' + tint(x.name), style: { width: '56px', height: '56px' } }, x.name.slice(0, 1).toUpperCase()), h('div', { class: 'grow' }, h('div', { class: 'bold', style: { fontSize: '17px' } }, x.name), h('div', { class: 'small muted' }, [x.phone, x.address].filter(Boolean).join(' · ') || '—')),
         x.phone ? h('a', { class: 'iconbtn', href: 'tel:' + x.phone, title: 'Gọi' }, icon('phone')) : null),
         h('div', { class: 'grid g2 mt12' }, h('div', { class: 'stat' }, h('div', { class: 'k' }, x.debt < 0 ? 'Dư có' : (isC ? 'Đang nợ' : 'Mình đang nợ')), h('div', { class: 'v ' + (x.debt > 0 ? 'neg-c' : '') }, fmtMoney(Math.abs(x.debt))), isC && x.debtLimit ? h('div', { class: 's' }, 'Hạn mức ' + fmtMoney(x.debtLimit)) : null),
           isC ? h('div', { class: 'stat' }, h('div', { class: 'k' }, 'Tổng đã mua'), h('div', { class: 'v' }, fmtMoney(x.totalSpent || 0)), E.settings().sale.pointsPer ? h('div', { class: 's' }, `★ ${x.points || 0} điểm`) : (x.lastBuyAt ? h('div', { class: 's' }, 'Lần cuối ' + fmtDate(x.lastBuyAt)) : null))

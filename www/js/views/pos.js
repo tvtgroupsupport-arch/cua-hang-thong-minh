@@ -1,7 +1,7 @@
 /* Màn hình bán hàng (POS): quét/tìm hàng, giỏ, đơn treo, khách, giảm giá, thanh toán, hoá đơn. */
 import { S } from '../store.js';
 import * as E from '../engine/index.js';
-import { h, icon, iconBtn, mount, modal, toast, guard, confirmBox, promptBox, moneyInput, qtyInput, field, select, pickFromList, badge, kv, debounce } from '../ui.js';
+import { h, icon, iconBtn, mount, modal, toast, guard, confirmBox, promptBox, moneyInput, qtyInput, field, select, pickFromList, badge, kv, debounce, tint } from '../ui.js';
 import { fmtMoney, fmtNum, parseQty, parseMoney, DAY, dayStart } from '../util.js';
 import { beep, openScanner, onScan, canScan, printReceipt, shareText, boostBrightness, restoreBrightness } from '../native.js';
 import { receiptText } from '../receipt.js';
@@ -73,7 +73,7 @@ export function viewPos(root, ctx) {
     if (!q) { resultsBox.classList.add('hide'); return; }
     results = E.searchProducts(q, { limit: 25 });
     mount(resultsBox, results.length ? results.map(p => h('div', { class: 'item click', onClick: () => { clearSearch(); addProductTap(p); } },
-      h('div', { class: 'thumb' }, p.image ? h('img', { src: p.image }) : p.name.slice(0, 1).toUpperCase()),
+      h('div', { class: 'thumb ' + tint(p.name) }, p.image ? h('img', { src: p.image }) : p.name.slice(0, 1).toUpperCase()),
       h('div', { class: 'grow' }, h('div', { class: 'ttl ellipsis' }, p.name), h('div', { class: 'sub' }, `${p.sku} · Tồn ${fmtNum(p.stock)} ${p.units[0].name}`)),
       h('div', { class: 'bold pos-c' }, fmtMoney(p.units[0].price)))) : h('div', { class: 'empty' }, 'Không tìm thấy "' + q + '"'));
     resultsBox.classList.remove('hide');

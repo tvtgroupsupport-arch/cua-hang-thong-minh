@@ -15,6 +15,7 @@ import { viewCustomers, viewSuppliers } from './views/people.js';
 import { viewPromos } from './views/promos.js';
 import { viewCash } from './views/cash.js';
 import { viewSettings, viewStaff, viewLogs } from './views/settings.js';
+import { viewExport } from './views/export.js';
 
 const SESSION_KEY = 'taphoa.staff';
 /* path, tiêu đề, quyền cần có (một trong), mục nav */
@@ -32,6 +33,7 @@ const ROUTES = {
   settings: { title: 'Cài đặt', perm: ['settings'], nav: 'more', view: viewSettings },
   staff: { title: 'Nhân viên & quyền', perm: ['manageStaff'], nav: 'more', view: viewStaff },
   logs: { title: 'Nhật ký hoạt động', perm: ['settings', 'manageStaff'], nav: 'more', view: viewLogs },
+  export: { title: 'Xuất báo cáo', perm: ['viewReports', 'manageStock', 'cashbook', 'manageProducts'], nav: 'reports', view: viewExport },
   help: { title: 'Hướng dẫn', perm: [], nav: 'more', view: viewHelp }
 };
 const NAV = [['pos', 'Bán hàng', 'cart'], ['products', 'Hàng hóa', 'box'], ['stock', 'Kho', 'warehouse'], ['reports', 'Báo cáo', 'chart'], ['more', 'Thêm', 'menu']];

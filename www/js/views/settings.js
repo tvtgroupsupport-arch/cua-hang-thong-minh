@@ -4,7 +4,7 @@ import * as E from '../engine/index.js';
 import { h, icon, iconBtn, mount, modal, toast, guard, confirmBox, promptBox, field, select, checkbox, badge, kv, empty, moneyInput, qtyInput, alertBox } from '../ui.js';
 import { fmtMoney, fmtNum, fmtDateTime, parseQty, ymd } from '../util.js';
 import { saveFile, pickFile, readFileText, isNative, scanPrinters, printReceipt } from '../native.js';
-import { getTheme, setTheme } from '../theme.js';
+import { getTheme, setTheme, getAccent, setAccent, ACCENTS } from '../theme.js';
 import { QR } from '../lib/qr.js';
 import { VietQR } from '../lib/vietqr.js';
 
@@ -72,7 +72,15 @@ export function viewSettings(root, ctx) {
     h('button', { class: 'btn primary', onClick: () => save({ stock: { expiryWarnDays: k.exp.num || 30, deadStockDays: k.dead.num || 60, reorderCoverDays: k.cover.num || 7 } }) }, 'Lưu'));
 
   /* ---- Giao diện ---- */
-  const themeCard = h('div', { class: 'card' }, h('h3', null, 'Giao diện'), select([['auto', 'Theo hệ thống'], ['light', 'Sáng'], ['dark', 'Tối']], getTheme(), { onChange: e => setTheme(e.target.value) }));
+  const themeCard = (() => {
+    const swatchBox = h('div', { class: 'swatches' }), modeBox = h('div', { class: 'seg' });
+    const draw = () => {
+      mount(swatchBox, Object.entries(ACCENTS).map(([k, a]) => h('button', { class: 'swatch' + (getAccent() === k ? ' on' : ''), title: a.name, 'aria-label': a.name, style: { background: `linear-gradient(135deg, ${a.a1}, ${a.a2})` }, onClick: () => { setAccent(k); draw(); } }, icon('check'))));
+      mount(modeBox, [['auto', 'Tự động'], ['light', 'Sáng'], ['dark', 'Tối']].map(([k, l]) => h('button', { class: getTheme() === k ? 'on' : '', onClick: () => { setTheme(k); draw(); } }, l)));
+    };
+    draw();
+    return h('div', { class: 'card' }, h('h3', null, 'Giao diện'), h('div', { class: 'small muted mb8' }, 'Màu chủ đạo'), swatchBox, h('div', { class: 'small muted mt12 mb8' }, 'Chế độ hiển thị'), modeBox);
+  })();
 
   /* ---- Sao lưu ---- */
   const last = S.getMeta('lastBackup', 0);

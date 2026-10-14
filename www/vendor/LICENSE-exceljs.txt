@@ -1,0 +1,2 @@
+ExcelJS 4.4.0 — MIT License — Copyright (c) 2014-2019 Guyon Roche
+https://github.com/exceljs/exceljs

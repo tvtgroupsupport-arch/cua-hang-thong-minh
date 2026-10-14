@@ -8,3 +8,4 @@ export * from './cash.js';
 export * from './sales.js';
 export * from './reports.js';
 export { loadDemo, demoLoaded } from './demo.js';
+export * from './exporter.js';

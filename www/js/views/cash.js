@@ -59,7 +59,7 @@ function bookTab(box, redraw) {
       E.can('settings') ? h('div', { class: 'small muted mt8' }, `Số dư đầu kỳ ghi nhận: tiền mặt ${fmtMoney(ob.cash)}, ngân hàng ${fmtMoney(ob.bank)} `, h('a', { href: '#', onClick: async ev => { ev.preventDefault(); const c = await promptBox({ title: 'Số dư tiền mặt ban đầu', type: 'money', value: String(ob.cash) }); if (c === null) return; const k = await promptBox({ title: 'Số dư ngân hàng ban đầu', type: 'money', value: String(ob.bank) }); if (k === null) return; await guard(() => E.setOpeningBalance({ cash: Number(c), bank: Number(k) })); redraw(); } }, 'Sửa')) : null);
     mount(list, fl.length ? h('div', { class: 'list' }, fl.slice().reverse().slice(0, 300).map(x => h('div', { class: 'item' }, h('div', { class: 'grow' }, h('div', { class: 'ttl' }, x.desc), h('div', { class: 'sub' }, fmtDateTime(x.ts) + ' · ' + (x.fund === 'cash' ? 'Tiền mặt' : 'Ngân hàng'))), h('div', { class: 'bold nowrap ' + (x.amount > 0 ? 'pos-c' : 'neg-c') }, (x.amount > 0 ? '+' : '') + fmtNum(x.amount))))) : empty('Không có giao dịch trong kỳ'));
   };
-  mount(box, bal, periodBar(period, drawList), list, h('button', { class: 'btn block mt12', onClick: () => exportTable('cashbook', period.from, period.to) }, icon('download', 18), ' Xuất sổ quỹ (CSV)'));
+  mount(box, bal, periodBar(period, drawList), list, h('button', { class: 'btn block mt12', onClick: () => exportTable('cashbook', period.from, period.to) }, icon('download', 18), ' Xuất sổ quỹ (Excel)'));
   drawList();
 }
 

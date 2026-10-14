@@ -12,6 +12,7 @@ let prodSort = 'revenue';
 
 export function viewReports(root, ctx) {
   const body = h('div'), tabsBox = h('div');
+  ctx.setActions(iconBtn('download', () => ctx.go('export'), 'Xuất báo cáo Excel'));
   const draw = () => {
     mount(tabsBox, tabs(TABS, tab, k => { tab = k; draw(); }));
     mount(body, ...(tab === 'overview' ? [overview(ctx)] : [periodBar(period, draw), TAB_FN[tab](ctx, draw)]));
@@ -67,7 +68,7 @@ function revenueTab() {
       h('tbody', null, staff.map(r => h('tr', null, h('td', null, r.name), h('td', { class: 'r' }, r.bills), h('td', { class: 'r' }, fmtMoney(r.revenue)), viewCost() ? h('td', { class: 'r' }, fmtMoney(r.profit)) : null))))) : empty('Chưa có dữ liệu')) : null,
     viewCost() ? h('div', { class: 'card' }, h('h3', null, 'Kết quả kinh doanh (ước tính)'), kv('Doanh thu thuần', fmtMoney(m.revenue)), kv('Giá vốn hàng bán', '-' + fmtMoney(m.cogs)), kv('Lợi nhuận gộp', fmtMoney(m.grossProfit), 'bold'), kv('Chi phí hoạt động (sổ quỹ)', '-' + fmtMoney(m.expenses)),
       m.otherIncome ? kv('Thu nhập khác', fmtMoney(m.otherIncome)) : null, kv('Hàng hủy', '-' + fmtMoney(m.writeOff)), kv('Hao hụt kiểm kho', '-' + fmtMoney(m.stocktakeLoss)), kv('Lãi ròng', fmtMoney(m.netProfit), m.netProfit < 0 ? 'neg-c' : 'pos-c')) : null,
-    h('div', { class: 'row mt12' }, h('button', { class: 'btn grow', onClick: () => exportTable('sales', from, to) }, icon('download', 18), ' Xuất DS hoá đơn (CSV)'), h('button', { class: 'btn grow', onClick: () => exportTable('products', from, to) }, icon('download', 18), ' Xuất theo sản phẩm')));
+    h('div', { class: 'row mt12' }, h('button', { class: 'btn grow', onClick: () => exportTable('sales', from, to) }, icon('download', 18), ' Xuất DS hoá đơn (Excel)'), h('button', { class: 'btn grow', onClick: () => exportTable('products', from, to) }, icon('download', 18), ' Xuất theo sản phẩm')));
 }
 
 /* ---------------- Hàng hóa ---------------- */
@@ -83,7 +84,7 @@ function productsTab(ctx, redraw) {
       h('div', { class: 'small muted mt8' }, 'Nhóm A là hàng mang lại phần lớn doanh thu – luôn phải đủ hàng. Nhóm C bán ít, cân nhắc giảm lượng nhập.')) : null,
     cats.length ? h('div', { class: 'card' }, h('h3', null, 'Theo nhóm hàng'), h('div', { class: 'list' }, cats.map(c => { const mx = cats[0].revenue || 1; return h('div', { class: 'item' }, h('div', { class: 'grow' }, h('div', { class: 'ttl' }, c.name), h('div', { class: 'bar mt8' }, h('i', { style: { width: c.revenue / mx * 100 + '%' } }))), h('div', { class: 'right' }, h('div', { class: 'bold' }, fmtMoney(c.revenue)), viewCost() ? h('div', { class: 'tiny muted' }, 'lãi ' + fmtMoney(c.profit)) : null)); }))) : null,
     h('div', { class: 'card' }, h('h3', null, 'Bán chậm / không bán được trong kỳ'), slow.length ? h('div', { class: 'list' }, slow.map(x => h('div', { class: 'item' }, h('div', { class: 'grow' }, h('div', { class: 'ttl' }, x.product.name), h('div', { class: 'sub' }, `Bán ${fmtNum(x.qtyBase)} · tồn ${fmtNum(x.product.stock)}${x.lastSold ? ' · bán gần nhất ' + fmtDate(x.lastSold) : ' · chưa từng bán'}`)), h('div', { class: 'bold' }, fmtMoney(x.value))))) : empty('Không có hàng tồn chậm')),
-    h('button', { class: 'btn block', onClick: () => exportTable('products', from, to) }, icon('download', 18), ' Xuất báo cáo sản phẩm (CSV)'));
+    h('button', { class: 'btn block', onClick: () => exportTable('products', from, to) }, icon('download', 18), ' Xuất báo cáo sản phẩm (Excel)'));
 }
 
 /* ---------------- Tồn kho ---------------- */
@@ -110,7 +111,7 @@ function debtTab(ctx) {
   return h('div', null, h('div', { class: 'grid g2' }, stat('Khách đang nợ', fmtMoney(d.receivable), `${d.customers.length} khách`, 'neg-c'), stat('Nợ nhà cung cấp', fmtMoney(d.payable), `${d.suppliers.length} nhà cung cấp`)),
     h('div', { class: 'card' }, h('h3', null, 'Khách hàng nợ'), d.customers.length ? h('div', { class: 'list' }, d.customers.map(x => row(x.customer.name, (x.customer.phone || '—') + (x.oldest ? ' · nợ từ ' + fmtDate(x.oldest) : ''), x.customer.debt, x.aging, '#/customers'))) : empty('Không có khách nợ 🎉')),
     h('div', { class: 'card' }, h('h3', null, 'Nợ nhà cung cấp'), d.suppliers.length ? h('div', { class: 'list' }, d.suppliers.map(x => row(x.supplier.name, (x.supplier.phone || '—') + (x.oldest ? ' · từ ' + fmtDate(x.oldest) : ''), x.supplier.debt, x.aging, '#/suppliers'))) : empty('Không nợ nhà cung cấp nào')),
-    h('button', { class: 'btn block', onClick: () => exportTable('debts', 0, Date.now(), 'cong-no.csv') }, icon('download', 18), ' Xuất công nợ (CSV)'));
+    h('button', { class: 'btn block', onClick: () => exportTable('debts', 0, Date.now(), 'cong-no.csv') }, icon('download', 18), ' Xuất công nợ (Excel)'));
 }
 
 /* ---------------- Hao hụt ---------------- */

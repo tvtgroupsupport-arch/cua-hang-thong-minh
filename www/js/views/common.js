@@ -38,9 +38,14 @@ export function periodBar(state, onChange, { keys = ['today', 'yesterday', '7d',
   draw(); return box;
 }
 
-export async function exportTable(kind, from, to, filename) {
-  const t = E.tableFor(kind, from, to);
-  return saveFile(filename || `${kind}-${ymd(from)}_${ymd(Math.min(to, Date.now()))}.csv`, toCsv([[t.title], [], t.head, ...t.rows]), 'text/csv');
+/** Xuất nhanh một báo cáo ra Excel (các nút "Xuất…" nằm ngay trong màn hình báo cáo). Muốn chọn nhiều báo cáo → trang Xuất báo cáo. */
+export async function exportTable(kind, from, to) {
+  const { exportReports } = await import('../xlsx-export.js');
+  try {
+    const r = await exportReports([kind], { from, to, format: 'xlsx', mode: 'share' });
+    if (r && r.empty) toast('Chưa có dữ liệu để xuất trong khoảng đã chọn', 'error');
+    else if (r) toast(`Đã xuất ${r.rows} dòng · ${r.filename}`, 'ok', 3500);
+  } catch (e) { toast(e.message || 'Không xuất được', 'error'); }
 }
 
 export const dueBadge = (days, warnAt = 30) => days > warnAt ? badge(days + ' ngày', 'red') : days > 7 ? badge(days + ' ngày', 'amber') : badge(days + ' ngày');

@@ -211,3 +211,6 @@ export function pickFromList({ title, items, render, match, searchPlaceholder = 
 export const kv = (k, v, cls) => h('div', { class: 'row between', style: { padding: '3px 0' } }, h('span', { class: 'muted' }, k), h('span', { class: 'bold ' + (cls || '') }, v));
 
 export function debounce(fn, ms = 200) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
+
+/** Màu nhạt cố định theo chuỗi (tên hàng/khách) → class t0..t7 cho ô thumb, để danh sách sinh động mà vẫn nhất quán. */
+export function tint(s) { let x = 0; for (const c of String(s || "")) x = (x * 31 + c.charCodeAt(0)) % 997; return "t" + (x % 8); }
