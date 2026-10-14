@@ -221,3 +221,34 @@ body:has(.login) { background: var(--grad); }
 .swatch.on { border-color: var(--text); } .swatch svg { width: 22px; height: 22px; opacity: 0; } .swatch.on svg { opacity: 1; }
 @media print { body * { visibility: hidden; } #printarea, #printarea * { visibility: visible; } #printarea { position: absolute; left: 0; top: 0; width: 100%; } }
 .grid + .card, .card + .grid, .grid + .grid, .grid + .list, .list + .card, .card + .list { margin-top: 12px; }
+
+/* ---------- Bán hàng: danh sách sản phẩm + thanh giỏ hàng + trang giỏ hàng ---------- */
+.pos { position: relative; overflow: hidden; }
+.pos-search { padding-bottom: 4px; }
+.pos-catalog { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.pos-chips { flex: none; padding: 4px 14px 6px; }
+.pos-grid { flex: 1; min-height: 0; overflow-y: auto; padding: 2px 14px 14px; -webkit-overflow-scrolling: touch; }
+.qgrid { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 9px; }
+.qitem { position: relative; min-height: 76px; padding: 10px 10px 9px; }
+.qitem.inc { box-shadow: 0 0 0 2.5px var(--primary), var(--shadow); }
+.qitem .n { padding-right: 24px; }
+.qbadge { position: absolute; top: -6px; right: -4px; min-width: 28px; height: 24px; padding: 0 7px; border-radius: 12px; background: var(--grad); color: #fff; font-size: 12.5px; font-weight: 800; display: grid; place-items: center; box-shadow: 0 4px 10px color-mix(in srgb, var(--a2) 40%, transparent); }
+.qminus { position: absolute; top: 6px; right: 6px; width: 24px; height: 24px; border-radius: 9px; background: var(--primary-l); color: var(--primary); display: grid; place-items: center; font-weight: 800; font-size: 16px; line-height: 1; }
+.cartbar { flex: none; display: flex; align-items: center; gap: 12px; margin: 6px 14px 10px; width: calc(100% - 28px); padding: 10px 14px; border: 0; border-radius: 22px; background: var(--grad); color: #fff; cursor: pointer; text-align: left; box-shadow: 0 12px 28px color-mix(in srgb, var(--a2) 42%, transparent); animation: up .2s ease-out; }
+.cartbar:active { transform: scale(.985); }
+.cartbar .cnt { position: relative; width: 46px; height: 46px; border-radius: 16px; background: rgba(255, 255, 255, .22); display: grid; place-items: center; flex: none; }
+.cartbar .cnt i { position: absolute; top: -6px; right: -6px; min-width: 22px; height: 22px; padding: 0 5px; border-radius: 11px; background: #ffd43b; color: #3b2f00; font-style: normal; font-size: 12px; font-weight: 800; display: grid; place-items: center; }
+.cartbar .grow { display: flex; flex-direction: column; line-height: 1.2; } .cartbar .lbl { font-size: 12.5px; opacity: .9; } .cartbar .sum { font-size: 20px; font-weight: 850; letter-spacing: -.02em; }
+.cartbar .go { display: inline-flex; align-items: center; gap: 2px; font-weight: 700; font-size: 14px; background: rgba(255, 255, 255, .2); padding: 9px 12px; border-radius: 14px; }
+.cartpage { position: absolute; inset: 0; z-index: 12; background: var(--bg); display: none; flex-direction: column; }
+.cartpage.open { display: flex; animation: up .24s cubic-bezier(.2, .8, .2, 1); }
+.cp-head { flex: none; display: flex; align-items: center; gap: 8px; padding: 10px 14px 6px; }
+.cp-head .iconbtn { background: var(--surface); box-shadow: var(--shadow); }
+.cartpage .pos-cart { flex: 1; min-height: 0; overflow-y: auto; padding: 6px 14px 10px; }
+@media (min-width: 900px) {
+  .cartpage { left: auto; width: min(520px, 100%); box-shadow: -24px 0 60px rgba(40, 30, 110, .28); border-radius: 28px 0 0 0; }
+  .qgrid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+}
+.qitem .n { padding-right: 0; }
+.qminus { top: auto; bottom: 6px; right: 6px; width: 26px; height: 26px; }
+.qitem.inc .tiny { visibility: hidden; }

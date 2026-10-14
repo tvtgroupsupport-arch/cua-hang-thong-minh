@@ -28,23 +28,41 @@ function quickProducts() {
 }
 
 export function viewPos(root, ctx) {
-  let calc = null, quickCat = '', results = [], q = '', quickOpen = null;
+  let calc = null, quickCat = '', q = '', cartOpen = false, allLimit = 120;
   const searchInput = h('input', { class: 'input', placeholder: 'Quét mã vạch hoặc gõ tên hàng…', autocomplete: 'off', enterkeyhint: 'search' });
-  const resultsBox = h('div', { class: 'results hide' });
+  const chipsBox = h('div', { class: 'chips pos-chips' });
+  const gridBox = h('div', { class: 'pos-grid' });
+  const cartBar = h('button', { class: 'cartbar hide', onClick: () => openCart() });
   const cartBox = h('div', { class: 'pos-cart' });
-  const quickBox = h('div', { class: 'pos-quick' });
   const foot = h('div', { class: 'pos-foot' });
+  const cpTitle = h('div', { class: 'grow' });
+  const cpClear = h('button', { class: 'btn sm ghost neg-c' }, 'Xoá hết');
+  const cartPage = h('div', { class: 'cartpage' },
+    h('div', { class: 'cp-head' }, h('button', { class: 'iconbtn cp-back', title: 'Tiếp tục chọn hàng', 'aria-label': 'Quay lại chọn hàng', onClick: () => closeCart() }, icon('back')), cpTitle, cpClear), cartBox, foot);
   const holdBtn = h('button', { class: 'iconbtn', title: 'Đơn đang treo', onClick: () => openHolds() }, icon('pause'));
   const scanBtn = h('button', { class: 'iconbtn', title: 'Quét bằng camera', onClick: () => scanLoop() }, icon('scan'));
+  const tiles = new Map();        // productId -> { tile, badge, minus }: chỉ cập nhật số lượng trên ô, không vẽ lại lưới (giữ nguyên vị trí cuộn)
 
-  /* ---------- Thêm hàng ---------- */
+  /* ---------- Giỏ hàng: mở / đóng ---------- */
+  function openCart() { if (!cart.lines.length) return; cartOpen = true; cartPage.classList.add('open'); }
+  function closeCart() { cartOpen = false; cartPage.classList.remove('open'); }
+  const qtyInCart = pid => Math.round(cart.lines.filter(l => l.productId === pid).reduce((s, l) => s + l.qty * ((S.get('products', pid) || { units: [] }).units.find(u => u.id === l.unitId) || { factor: 1 }).factor, 0) * 1000) / 1000;
+
+  /* ---------- Thêm / bớt hàng ---------- */
   function addLine(p, unit, qty = 1) {
     unit = unit || p.units[0];
     const ex = cart.lines.find(l => l.productId === p.id && l.unitId === unit.id && l.price == null && !l.discount);
     if (ex) ex.qty = Math.round((ex.qty + qty) * 1000) / 1000;
     else cart.lines.push({ productId: p.id, unitId: unit.id, qty });
     changed(); beep('ok');
-    setTimeout(() => { cartBox.scrollTop = cartBox.scrollHeight; }, 20);
+    if (!cartOpen) toast('+ ' + p.name, 'ok', 900);
+    else setTimeout(() => { cartBox.scrollTop = cartBox.scrollHeight; }, 20);
+  }
+  function removeOne(p) {       // nút "−" trên ô sản phẩm: bớt một đơn vị cơ bản ở dòng gần nhất
+    const i = cart.lines.map(l => l.productId).lastIndexOf(p.id); if (i < 0) return;
+    const l = cart.lines[i], step = p.kind === 'weight' ? 0.1 : 1;
+    if (l.qty - step <= 0.0001) cart.lines.splice(i, 1); else l.qty = Math.round((l.qty - step) * 1000) / 1000;
+    changed();
   }
   async function addProductTap(p) {
     if (p.kind === 'weight') {
@@ -67,19 +85,9 @@ export function viewPos(root, ctx) {
     } });
   }
 
-  /* ---------- Tìm kiếm ---------- */
-  const doSearch = debounce(() => {
-    q = searchInput.value.trim();
-    if (!q) { resultsBox.classList.add('hide'); return; }
-    results = E.searchProducts(q, { limit: 25 });
-    mount(resultsBox, results.length ? results.map(p => h('div', { class: 'item click', onClick: () => { clearSearch(); addProductTap(p); } },
-      h('div', { class: 'thumb ' + tint(p.name) }, p.image ? h('img', { src: p.image }) : p.name.slice(0, 1).toUpperCase()),
-      h('div', { class: 'grow' }, h('div', { class: 'ttl ellipsis' }, p.name), h('div', { class: 'sub' }, `${p.sku} · Tồn ${fmtNum(p.stock)} ${p.units[0].name}`)),
-      h('div', { class: 'bold pos-c' }, fmtMoney(p.units[0].price)))) : h('div', { class: 'empty' }, 'Không tìm thấy "' + q + '"'));
-    resultsBox.classList.remove('hide');
-  }, 120);
-  const clearSearch = () => { searchInput.value = ''; q = ''; resultsBox.classList.add('hide'); };
-  searchInput.addEventListener('input', doSearch);
+  /* ---------- Tìm kiếm: lọc ngay trên lưới sản phẩm ---------- */
+  const clearSearch = () => { searchInput.value = ''; q = ''; renderCatalog(); };
+  searchInput.addEventListener('input', debounce(() => { q = searchInput.value.trim(); allLimit = 120; renderCatalog(); }, 120));
   searchInput.addEventListener('keydown', async e => {
     if (e.key !== 'Enter') return;
     const v = searchInput.value.trim(); if (!v) return;
@@ -87,11 +95,9 @@ export function viewPos(root, ctx) {
     const r = E.searchProducts(v, { limit: 3 });
     if (r.length === 1) { clearSearch(); addProductTap(r[0]); } else if (!r.length) { beep('bad'); toast('Không tìm thấy "' + v + '"', 'error'); }
   });
-  searchInput.addEventListener('blur', () => setTimeout(() => resultsBox.classList.add('hide'), 200));
-  searchInput.addEventListener('focus', () => { if (searchInput.value) doSearch(); });
-  const offScan = onScan(async code => { if (!(await addByCode(code))) { beep('bad'); toast('Không tìm thấy mã ' + code, 'error'); } else clearSearch(); });
-  const onDocKey = e => { // gõ bất kỳ đâu → vào ô tìm (trừ khi đang ở ô nhập khác/hộp thoại)
-    if (document.querySelector('.overlay') || e.ctrlKey || e.metaKey || e.altKey || e.key.length !== 1) return;
+  const offScan = onScan(async code => { if (!(await addByCode(code))) { beep('bad'); toast('Không tìm thấy mã ' + code, 'error'); } else if (q) clearSearch(); });
+  const onDocKey = e => { // gõ bất kỳ đâu → vào ô tìm (trừ khi đang ở ô nhập khác/hộp thoại/giỏ hàng)
+    if (cartOpen || document.querySelector('.overlay') || e.ctrlKey || e.metaKey || e.altKey || e.key.length !== 1) return;
     if (/^(input|textarea|select)$/i.test(document.activeElement.tagName)) return;
     searchInput.focus();
   };
@@ -159,15 +165,63 @@ export function viewPos(root, ctx) {
     catch (e) { if (e.name === 'AppError') { toast(e.message, 'error'); const bad = cart.lines.findIndex(l => !S.get('products', l.productId)); if (bad >= 0) cart.lines.splice(bad, 1); else cart.lines.pop(); saveCart(); return render(); } throw e; }
     const holds = E.listHolds();
     mount(holdBtn, icon('pause'), holds.length ? h('span', { class: 'dot' }, holds.length) : null);
+    if (!cart.lines.length && cartOpen) closeCart();
+    updateTiles(); renderCartBar(); renderCartPage();
+  }
+
+  /* --- Danh sách sản phẩm (chiếm gần hết màn hình) --- */
+  function catalogList() {
+    if (q) return E.searchProducts(q, { limit: 150 });
+    if (quickCat === '*') return E.searchProducts('', { limit: allLimit });
+    if (quickCat) return E.searchProducts('', { categoryId: quickCat, limit: 200 });
+    return quickProducts();
+  }
+  function renderCatalog() {
+    const cats = E.categoryTree().filter(x => x.depth === 0);
+    const chip = (key, label) => h('span', { class: 'chip ' + (!q && quickCat === key ? 'on' : ''), onClick: () => { quickCat = key; allLimit = 120; if (q) { searchInput.value = ''; q = ''; } renderCatalog(); } }, label);
+    mount(chipsBox, chip('', 'Hay bán'), chip('*', 'Tất cả'), cats.map(({ cat }) => chip(cat.id, cat.name)));
+    const list = catalogList();
+    tiles.clear();
+    const more = !q && quickCat === '*' && list.length >= allLimit;
+    mount(gridBox, list.length ? [h('div', { class: 'qgrid' }, list.map(p => {
+      const badge_ = h('span', { class: 'qbadge hide' }), minus = h('span', { class: 'qminus hide', role: 'button', 'aria-label': 'Bớt 1', onClick: e => { e.stopPropagation(); removeOne(p); } }, '−');
+      const tile = h('button', { class: 'qitem', onClick: () => addProductTap(p) }, badge_, minus, h('div', { class: 'n' }, p.name),
+        h('div', { class: 'row between' }, h('span', { class: 'p' }, fmtNum(p.units[0].price) + (p.kind === 'weight' ? '/' + p.units[0].name : '')), p.stock <= 0 ? badge('Hết', 'red') : h('span', { class: 'tiny muted' }, fmtNum(p.stock))));
+      tiles.set(p.id, { tile, badge: badge_, minus });
+      return tile;
+    })), more ? h('button', { class: 'btn block mt12', onClick: () => { allLimit += 150; renderCatalog(); } }, 'Xem thêm sản phẩm') : null]
+      : h('div', { class: 'empty' }, q ? 'Không tìm thấy "' + q + '"' : 'Chưa có hàng hóa. Vào mục Hàng hóa để thêm.'));
+    updateTiles();
+  }
+  function updateTiles() {
+    for (const [pid, t] of tiles) {
+      const n = qtyInCart(pid);
+      t.tile.classList.toggle('inc', n > 0);
+      t.badge.classList.toggle('hide', !(n > 0)); t.minus.classList.toggle('hide', !(n > 0));
+      if (n > 0) t.badge.textContent = '×' + fmtNum(n);
+    }
+  }
+
+  /* --- Thanh giỏ hàng thu gọn: chỉ hiện khi có hàng, chạm vào mới mở giỏ --- */
+  function renderCartBar() {
+    cartBar.classList.toggle('hide', !cart.lines.length);
+    if (!cart.lines.length) return;
+    mount(cartBar, h('span', { class: 'cnt' }, icon('cart', 22), h('i', null, fmtNum(calc.itemCount))), h('span', { class: 'grow left' }, h('span', { class: 'lbl' }, `${calc.lines.length} mặt hàng`), h('span', { class: 'sum' }, fmtMoney(calc.total))),
+      h('span', { class: 'go' }, 'Xem giỏ hàng', icon('chevron', 18)));
+  }
+
+  /* --- Trang giỏ hàng (chỉ hiện khi người dùng chạm vào thanh giỏ hàng) --- */
+  function renderCartPage() {
+    mount(cpTitle, h('div', { class: 'bold', style: { fontSize: '18px' } }, 'Giỏ hàng'), h('div', { class: 'small muted' }, `${calc.lines.length} mặt hàng · ${fmtNum(calc.itemCount)} sản phẩm`));
+    cpClear.onclick = async () => { if (await confirmBox('Xoá toàn bộ giỏ hàng?', { danger: true, okText: 'Xoá' })) { cart = emptyCart(); holdId = null; changed(); } };
+    cpClear.classList.toggle('hide', !cart.lines.length);
     const shiftBanner = E.settings().sale.requireShift && !E.currentShift() ? h('div', { class: 'banner mb8' }, 'Chưa mở ca làm việc. ', h('a', { href: '#/cash', style: { fontWeight: 700 } }, 'Mở ca ngay')) : null;
     const cust = calc.customer;
     const top = h('div', { class: 'row mb8' },
       h('button', { class: 'btn sm cust ' + (cust ? 'soft' : ''), onClick: pickCustomer }, icon('user', 16), h('span', { class: 'nm' }, cust ? cust.name : 'Khách lẻ'), cust && cust.debt > 0 ? h('span', { class: 'neg-c tiny nowrap' }, ' nợ ' + fmtNum(cust.debt)) : null),
       cust && E.settings().sale.pointsPer > 0 ? h('button', { class: 'btn sm', onClick: () => editPoints(calc) }, `★ ${cust.points} điểm`) : null,
       h('div', { class: 'grow' }),
-      window.innerWidth < 700 ? h('button', { class: 'btn sm' + (quickOpen === false || (quickOpen === null && cart.lines.length) ? '' : ' soft'), onClick: () => { const cur = quickOpen !== null ? quickOpen : !cart.lines.length; quickOpen = !cur; render(); } }, icon('box', 16), 'Chọn hàng') : null,
-      h('button', { class: 'btn sm', onClick: editVoucher }, icon('tag', 16), cart.voucher || 'Mã giảm giá'),
-      cart.lines.length ? h('button', { class: 'btn sm ghost neg-c', onClick: async () => { if (await confirmBox('Xoá toàn bộ giỏ hàng?', { danger: true, okText: 'Xoá' })) { cart = emptyCart(); holdId = null; changed(); } } }, 'Xoá hết') : null);
+      h('button', { class: 'btn sm', onClick: editVoucher }, icon('tag', 16), cart.voucher || 'Mã giảm giá'));
     const lines = calc.lines.map((cl, i) => {
       const p = S.get('products', cl.productId), line = cart.lines[i];
       const warn = calc.warnings.filter(w => w.productId === cl.productId);
@@ -184,26 +238,14 @@ export function viewPos(root, ctx) {
           ...cl.promoNames.map(n => badge('KM: ' + n, 'green'))),
         warn.map(w => h('div', { class: 'tiny ' + (w.code === 'expired' || w.code === 'below_cost' ? 'neg-c' : 'warn-c'), style: { marginTop: '4px' } }, '⚠ ' + w.text)));
     });
-    mount(cartBox, shiftBanner, top, lines.length ? lines : h('div', { class: 'empty' }, icon('cart', 40), h('div', null, 'Giỏ hàng trống'), h('div', { class: 'small' }, 'Quét mã vạch hoặc chọn hàng bên dưới')));
+    mount(cartBox, shiftBanner, top, lines.length ? lines : h('div', { class: 'empty' }, icon('cart', 40), h('div', null, 'Giỏ hàng trống')));
     const disc = calc.discountTotal;
     mount(foot, h('div', { class: 'row between' },
-      h('div', null, h('div', { class: 'small muted' }, `${calc.lines.length} mặt hàng · ${fmtNum(calc.itemCount)} sản phẩm`),
-        disc > 0 ? h('div', { class: 'small' }, 'Tạm tính ', h('s', { class: 'muted' }, fmtMoney(calc.subtotal)), h('span', { class: 'pos-c' }, ` giảm ${fmtMoney(disc)}`)) : null,
+      h('div', null, disc > 0 ? h('div', { class: 'small' }, 'Tạm tính ', h('s', { class: 'muted' }, fmtMoney(calc.subtotal)), h('span', { class: 'pos-c' }, ` giảm ${fmtMoney(disc)}`)) : h('div', { class: 'small muted' }, 'Tổng thanh toán'),
         h('div', { class: 'tot' }, fmtMoney(calc.total))),
       h('div', { class: 'row foot-btns' }, h('button', { class: 'btn', disabled: !cart.lines.length, onClick: editDiscount, title: 'Giảm giá cả đơn' }, icon('tag', 18), cart.discount ? (cart.discount.type === 'percent' ? cart.discount.value + '%' : fmtNum(cart.discount.value)) : 'Giảm'),
         h('button', { class: 'btn', disabled: !cart.lines.length, onClick: holdCart, title: 'Treo đơn' }, icon('pause', 18)),
         h('button', { class: 'btn primary lg', disabled: !cart.lines.length, onClick: () => openPayment(calc) }, 'Thanh toán'))));
-    const narrow = window.innerWidth < 700, open = quickOpen !== null ? quickOpen : (!narrow || !cart.lines.length);
-    quickBox.classList.toggle('hide', !open);
-    if (open) renderQuick();
-  }
-  function renderQuick() {
-    const cats = E.categoryTree().filter(x => x.depth === 0);
-    const list = quickCat ? E.searchProducts('', { categoryId: quickCat, limit: 120 }) : quickProducts();
-    mount(quickBox, h('div', { class: 'chips' }, h('span', { class: 'chip ' + (!quickCat ? 'on' : ''), onClick: () => { quickCat = ''; renderQuick(); } }, 'Hay bán'),
-      cats.map(({ cat }) => h('span', { class: 'chip ' + (quickCat === cat.id ? 'on' : ''), onClick: () => { quickCat = cat.id; renderQuick(); } }, cat.name))),
-      list.length ? h('div', { class: 'qgrid' }, list.map(p => h('button', { class: 'qitem', onClick: () => addProductTap(p) }, h('div', { class: 'n' }, p.name),
-        h('div', { class: 'row between' }, h('span', { class: 'p' }, fmtNum(p.units[0].price) + (p.kind === 'weight' ? '/' + p.units[0].name : '')), p.stock <= 0 ? badge('Hết', 'red') : null)))) : h('div', { class: 'empty' }, 'Chưa có hàng hóa. Vào mục Hàng hóa để thêm.'));
   }
 
   /* ---------- Đơn treo ---------- */
@@ -297,8 +339,10 @@ export function viewPos(root, ctx) {
 
   /* ---------- Khung ---------- */
   ctx.setActions(holdBtn, iconBtn('receipt', () => ctx.go('sales'), 'Lịch sử hoá đơn'));
-  mount(root, h('div', { class: 'pos' }, h('div', { class: 'pos-search' }, h('span', { class: 'sicon' }, icon('search')), h('div', { class: 'row' }, h('div', { class: 'grow' }, searchInput), scanBtn), resultsBox),
-    h('div', { class: 'pos-body' }, cartBox, quickBox), foot));
+  mount(root, h('div', { class: 'pos' },
+    h('div', { class: 'pos-search' }, h('span', { class: 'sicon' }, icon('search')), h('div', { class: 'row' }, h('div', { class: 'grow' }, searchInput), scanBtn)),
+    h('div', { class: 'pos-catalog' }, chipsBox, gridBox), cartBar, cartPage));
+  renderCatalog();
   render();
   if (!canScan()) scanBtn.title = 'Thiết bị không hỗ trợ quét bằng camera – dùng máy quét hoặc gõ mã';
   return () => { offScan(); document.removeEventListener('keydown', onDocKey); };

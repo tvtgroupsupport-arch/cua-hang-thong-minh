@@ -123,6 +123,7 @@ async function openStore() {
 /** Nút Back của Android: đóng hộp thoại trước, rồi lùi màn hình, rồi về Bán hàng; ở Bán hàng thì thu nhỏ app (không thoát hẳn, khỏi mất phiên). */
 function handleBack() {
   if (document.querySelector('.overlay')) { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); return true; }
+  const cp = document.querySelector('.cartpage.open .cp-back'); if (cp) { cp.click(); return true; }      // đang xem giỏ hàng → quay lại danh sách sản phẩm
   if (!shell) return false;
   const name = (location.hash.replace(/^#\/?/, '') || '').split('/')[0];
   if (name && name !== 'pos' && ['sales', 'customers', 'suppliers', 'promos', 'cash', 'settings', 'staff', 'logs', 'help'].includes(name)) { go('more'); return true; }
