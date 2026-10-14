@@ -116,9 +116,10 @@ function cleanUnits(d) {
 }
 
 export function nextSku() {
+  const tag = (S.meta.sync && S.meta.sync.enabled && S.meta.sync.tag) || '';      // có đồng bộ: SPB00001… để không trùng giữa các máy
   let n = S.nextSeq('sku');
-  while (S.list('products').some(p => p.sku === 'SP' + String(n).padStart(5, '0'))) n = S.nextSeq('sku');
-  return 'SP' + String(n).padStart(5, '0');
+  while (S.list('products').some(p => p.sku === 'SP' + tag + String(n).padStart(5, '0'))) n = S.nextSeq('sku');
+  return 'SP' + tag + String(n).padStart(5, '0');
 }
 
 /** Tạo/sửa sản phẩm. Khi tạo mới có `stock` > 0 sẽ ghi tồn đầu kỳ (kèm lô nếu theo dõi lô). */

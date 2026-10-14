@@ -22,10 +22,12 @@ export function viewProducts(root, ctx) {
 
   function draw() {
     const cats = E.categoryTree().filter(x => x.depth === 0);
-    mount(chipsBox, h('div', { class: 'chips', 'data-swipe': 'chips' }, h('span', { class: 'chip ' + (!catId && !onlyLow ? 'on' : ''), 'data-sw': '', onClick: () => { catId = ''; onlyLow = false; draw(); } }, 'Tất cả'),
-      h('span', { class: 'chip ' + (onlyLow ? 'on' : ''), onClick: () => { onlyLow = !onlyLow; draw(); } }, '⚠ Sắp hết'),
-      cats.map(({ cat }) => h('span', { class: 'chip ' + (catId === cat.id ? 'on' : ''), 'data-sw': '', onClick: () => { catId = catId === cat.id ? '' : cat.id; draw(); } }, cat.name)),
-      h('span', { class: 'chip ' + (showInactive ? 'on' : ''), onClick: () => { showInactive = !showInactive; draw(); } }, 'Ngừng bán')));
+    const pick = (c, l, i) => { catId = c; onlyLow = l; showInactive = i; draw(); };     // các bộ lọc loại trừ nhau: luôn có đúng MỘT chip đang chọn (để vuốt đổi được qua tất cả)
+    const chip = (label, on, fn) => h('span', { class: 'chip ' + (on ? 'on' : ''), 'data-sw': '', onClick: fn }, label);
+    mount(chipsBox, h('div', { class: 'chips', 'data-swipe': 'chips' }, chip('Tất cả', !catId && !onlyLow && !showInactive, () => pick('', false, false)),
+      chip('⚠ Sắp hết', onlyLow, () => pick('', true, false)),
+      cats.map(({ cat }) => chip(cat.name, catId === cat.id, () => pick(cat.id, false, false))),
+      chip('Ngừng bán', showInactive, () => pick('', false, true))));
     let list = E.searchProducts(q, { categoryId: catId || undefined, activeOnly: !showInactive, onlyLow, limit: 100000 });
     if (showInactive) list = list.filter(p => !p.active);
     const total = list.length, shown = list.slice(0, limit);

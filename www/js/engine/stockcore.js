@@ -11,7 +11,7 @@ function sortedBatches(productId) {
 /** Nhập kho. type: opening|purchase|return_in|adjust|stocktake|cancel. retAlloc: trả lại đúng các lô đã xuất. */
 export function stockIn(productId, qty, o = {}) {
   if (!(qty > 0)) fail('Số lượng nhập phải lớn hơn 0');
-  const p = S.mut('products', productId);
+  const p = S.mutD('products', productId);
   p.stock = roundQty(p.stock + qty);
   const batchIds = [];
   if (p.trackBatch) {
@@ -19,7 +19,7 @@ export function stockIn(productId, qty, o = {}) {
       let left = qty;
       for (const a of o.retAlloc) {
         const b = S.get('batches', a.batchId); const q = Math.min(left, a.qty);
-        if (b && q > 0) { S.mut('batches', b.id).qty = roundQty(b.qty + q); batchIds.push({ batchId: b.id, qty: q }); left = roundQty(left - q); }
+        if (b && q > 0) { S.mutD('batches', b.id).qty = roundQty(b.qty + q); batchIds.push({ batchId: b.id, qty: q }); left = roundQty(left - q); }
       }
       if (left > 0) batchIds.push(...addToBatch(p, left, o));
     } else batchIds.push(...addToBatch(p, qty, o));
@@ -33,7 +33,7 @@ export function stockIn(productId, qty, o = {}) {
 function addToBatch(p, qty, o) {
   const lot = o.lot || '', expiry = o.expiry || null;
   let b = S.list('batches').find(x => x.productId === p.id && x.lot === lot && (x.expiry || null) === expiry);
-  if (b) { b = S.mut('batches', b.id); b.qty = roundQty(b.qty + qty); b.qtyIn = roundQty((b.qtyIn || 0) + qty); }
+  if (b) { b = S.mutD('batches', b.id); b.qty = roundQty(b.qty + qty); b.qtyIn = roundQty((b.qtyIn || 0) + qty); }
   else b = S.add('batches', { productId: p.id, lot, expiry, qty, qtyIn: qty, cost: o.cost == null ? p.cost : o.cost, source: o.type || 'adjust', ref: o.ref || null });
   return [{ batchId: b.id, qty }];
 }
@@ -42,7 +42,7 @@ function addToBatch(p, qty, o) {
     batchId: bắt buộc lấy đúng lô đó. Tồn có thể âm (kiểm tra cho phép/không do nơi gọi). */
 export function stockOut(productId, qty, o = {}) {
   if (!(qty > 0)) fail('Số lượng xuất phải lớn hơn 0');
-  const p = S.mut('products', productId);
+  const p = S.mutD('products', productId);
   p.stock = roundQty(p.stock - qty);
   const alloc = [];
   if (p.trackBatch) {
@@ -51,7 +51,7 @@ export function stockOut(productId, qty, o = {}) {
     for (const b of pool) {
       if (left <= 0) break;
       const q = Math.min(left, b.qty);
-      S.mut('batches', b.id).qty = roundQty(b.qty - q);
+      S.mutD('batches', b.id).qty = roundQty(b.qty - q);
       alloc.push({ batchId: b.id, qty: q, cost: b.cost }); left = roundQty(left - q);
     }
   }

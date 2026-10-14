@@ -269,3 +269,27 @@ body:has(.login) { background: var(--grad); }
 .ro-pills { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
 .ro-pill { background: var(--surface); border-radius: 99px; padding: 4px 12px; font-size: 12.5px; font-weight: 700; }
 .ro-pill i { font-style: normal; color: var(--muted); font-weight: 600; margin-right: 6px; }
+
+/* vuốt ngang để đổi tab: để trình duyệt chỉ xử lý cuộn dọc, cử chỉ ngang thuộc về app (vùng tự cuộn ngang như thanh chip/bảng vẫn cuộn ngang bình thường) */
+.main, .modal > .body { touch-action: pan-y; }
+.chips, .scroll-x, .tabs { touch-action: pan-x pan-y; }
+
+/* ---------- Ô sản phẩm có ảnh: lưới ảnh hoặc danh sách gọn ---------- */
+.qitem { justify-content: flex-start; gap: 7px; padding: 8px; }
+.qitem .qimg { width: 100%; height: auto; aspect-ratio: 5 / 4; border-radius: 13px; font-size: 28px; flex: none; }
+.qitem .qbody { display: flex; flex-direction: column; justify-content: space-between; gap: 4px; flex: 1; min-width: 0; width: 100%; }
+.qitem .qbody .row { width: 100%; }
+.qitem .n { min-height: 2.5em; }
+.qgrid.list { grid-template-columns: 1fr; gap: 8px; }
+.qgrid.list .qitem { flex-direction: row; align-items: center; gap: 12px; min-height: 66px; padding: 7px 12px 7px 7px; }
+.qgrid.list .qitem .qimg { width: 52px; aspect-ratio: 1; border-radius: 14px; font-size: 22px; }
+.qgrid.list .qitem .n { min-height: 0; -webkit-line-clamp: 2; }
+.qgrid.list .qitem .qminus { bottom: 8px; right: 10px; }
+@media (min-width: 900px) { .qgrid.list { grid-template-columns: repeat(2, 1fr); } }
+
+/* ---------- Biểu tượng đồng bộ trên thanh trên ---------- */
+.sync-btn { position: relative; }
+.sync-btn::after { content: ""; position: absolute; right: 6px; bottom: 7px; width: 9px; height: 9px; border-radius: 50%; border: 2px solid #fff; background: #2bd4a0; }
+.sync-btn.pend::after { background: #ffbc3d; } .sync-btn.err::after { background: #ff5c7a; } .sync-btn.busy::after { background: #fff; animation: pulse 1s infinite; }
+.sync-btn.busy svg { animation: spin 1.2s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } } @keyframes pulse { 50% { opacity: .25; } }

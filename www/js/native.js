@@ -210,3 +210,20 @@ export function printHtml(html) {
   setTimeout(() => { try { f.contentWindow.focus(); f.contentWindow.print(); } catch (e) { toast('Không in được: ' + e.message, 'error'); } setTimeout(() => f.remove(), 2000); }, 250);
   return true;
 }
+
+/* ---------- Tiện ích: sao chép, mở liên kết ---------- */
+/** Sao chép văn bản vào bộ nhớ tạm; trả true nếu được. */
+export async function copyText(text) {
+  try { if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(text); return true; } } catch (e) {}
+  try {
+    const t = h('textarea', { style: { position: 'fixed', top: '-1000px' }, value: text }); document.body.appendChild(t); t.select();
+    const ok = document.execCommand('copy'); t.remove(); if (ok) return true;
+  } catch (e) {}
+  return false;
+}
+/** Mở trang web bên ngoài (Android: trình duyệt hệ thống qua plugin Browser; web: tab mới). */
+export function openUrl(url) {
+  if (!/^https:\/\//i.test(url)) return;
+  try { if (nb() && nb().openUrl) { nb().openUrl(url); return; } } catch (e) {}
+  window.open(url, '_blank', 'noopener');
+}

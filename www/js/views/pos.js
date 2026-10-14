@@ -28,7 +28,7 @@ function quickProducts() {
 }
 
 export function viewPos(root, ctx) {
-  let calc = null, quickCat = '', q = '', cartOpen = false, allLimit = 120;
+  let calc = null, quickCat = '', q = '', cartOpen = false, allLimit = 120, posView = lsGet('taphoa.posview') === 'list' ? 'list' : 'grid';
   const searchInput = h('input', { class: 'input', placeholder: 'Quét mã vạch hoặc gõ tên hàng…', autocomplete: 'off', enterkeyhint: 'search' });
   const chipsBox = h('div', { class: 'chips pos-chips', 'data-swipe': 'chips' });
   const gridBox = h('div', { class: 'pos-grid' });
@@ -41,6 +41,8 @@ export function viewPos(root, ctx) {
     h('div', { class: 'cp-head' }, h('button', { class: 'iconbtn cp-back', title: 'Tiếp tục chọn hàng', 'aria-label': 'Quay lại chọn hàng', onClick: () => closeCart() }, icon('back')), cpTitle, cpClear), cartBox, foot);
   const holdBtn = h('button', { class: 'iconbtn', title: 'Đơn đang treo', onClick: () => openHolds() }, icon('pause'));
   const scanBtn = h('button', { class: 'iconbtn', title: 'Quét bằng camera', onClick: () => scanLoop() }, icon('scan'));
+  const viewBtn = h('button', { class: 'iconbtn', title: 'Đổi cách hiển thị sản phẩm', onClick: () => { posView = posView === 'grid' ? 'list' : 'grid'; lsSet('taphoa.posview', posView); drawViewBtn(); renderCatalog(); } });
+  const drawViewBtn = () => mount(viewBtn, icon(posView === 'grid' ? 'list' : 'grid'));
   const tiles = new Map();        // productId -> { tile, badge, minus }: chỉ cập nhật số lượng trên ô, không vẽ lại lưới (giữ nguyên vị trí cuộn)
 
   /* ---------- Giỏ hàng: mở / đóng ---------- */
@@ -183,10 +185,11 @@ export function viewPos(root, ctx) {
     const list = catalogList();
     tiles.clear();
     const more = !q && quickCat === '*' && list.length >= allLimit;
-    mount(gridBox, list.length ? [h('div', { class: 'qgrid' }, list.map(p => {
+    mount(gridBox, list.length ? [h('div', { class: 'qgrid' + (posView === 'list' ? ' list' : '') }, list.map(p => {
       const badge_ = h('span', { class: 'qbadge hide' }), minus = h('span', { class: 'qminus hide', role: 'button', 'aria-label': 'Bớt 1', onClick: e => { e.stopPropagation(); removeOne(p); } }, '−');
-      const tile = h('button', { class: 'qitem', onClick: () => addProductTap(p) }, badge_, minus, h('div', { class: 'n' }, p.name),
-        h('div', { class: 'row between' }, h('span', { class: 'p' }, fmtNum(p.units[0].price) + (p.kind === 'weight' ? '/' + p.units[0].name : '')), p.stock <= 0 ? badge('Hết', 'red') : h('span', { class: 'tiny muted' }, fmtNum(p.stock))));
+      const media = h('div', { class: 'qimg thumb ' + tint(p.name) }, p.image ? h('img', { src: p.image, alt: '', loading: 'lazy', decoding: 'async' }) : p.name.slice(0, 1).toUpperCase());
+      const tile = h('button', { class: 'qitem', onClick: () => addProductTap(p) }, media, badge_, minus, h('div', { class: 'qbody' }, h('div', { class: 'n' }, p.name),
+        h('div', { class: 'row between' }, h('span', { class: 'p' }, fmtNum(p.units[0].price) + (p.kind === 'weight' ? '/' + p.units[0].name : '')), p.stock <= 0 ? badge('Hết', 'red') : h('span', { class: 'tiny muted' }, fmtNum(p.stock)))));
       tiles.set(p.id, { tile, badge: badge_, minus });
       return tile;
     })), more ? h('button', { class: 'btn block mt12', onClick: () => { allLimit += 150; renderCatalog(); } }, 'Xem thêm sản phẩm') : null]
@@ -340,9 +343,9 @@ export function viewPos(root, ctx) {
   /* ---------- Khung ---------- */
   ctx.setActions(holdBtn, iconBtn('receipt', () => ctx.go('sales'), 'Lịch sử hoá đơn'));
   mount(root, h('div', { class: 'pos' },
-    h('div', { class: 'pos-search' }, h('span', { class: 'sicon' }, icon('search')), h('div', { class: 'row' }, h('div', { class: 'grow' }, searchInput), scanBtn)),
+    h('div', { class: 'pos-search' }, h('span', { class: 'sicon' }, icon('search')), h('div', { class: 'row' }, h('div', { class: 'grow' }, searchInput), viewBtn, scanBtn)),
     h('div', { class: 'pos-catalog' }, chipsBox, gridBox), cartBar, cartPage));
-  renderCatalog();
+  drawViewBtn(); renderCatalog();
   render();
   if (!canScan()) scanBtn.title = 'Thiết bị không hỗ trợ quét bằng camera – dùng máy quét hoặc gõ mã';
   return () => { offScan(); document.removeEventListener('keydown', onDocKey); };

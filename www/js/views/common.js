@@ -29,7 +29,7 @@ export function pickProduct({ title = 'Chọn hàng hóa', keepOpen = false, onP
 export function periodBar(state, onChange, { keys = ['today', 'yesterday', '7d', 'month', 'lastmonth', 'year', 'custom'] } = {}) {
   const names = { today: 'Hôm nay', yesterday: 'Hôm qua', '7d': '7 ngày', '30d': '30 ngày', month: 'Tháng này', lastmonth: 'Tháng trước', year: 'Năm nay', custom: 'Tuỳ chọn' };
   const box = h('div');
-  const draw = () => mount(box, h('div', { class: 'chips' }, keys.map(k => h('span', { class: 'chip ' + (state.key === k ? 'on' : ''), onClick: () => {
+  const draw = () => mount(box, h('div', { class: 'chips', 'data-swipe': 'chips' }, keys.map(k => h('span', { class: 'chip ' + (state.key === k ? 'on' : ''), 'data-sw': '', onClick: () => {
     state.key = k; if (k !== 'custom') Object.assign(state, periodRange(k)); draw(); onChange(state);
   } }, names[k]))), state.key === 'custom' ? h('div', { class: 'row mb8' },
     h('input', { class: 'input', type: 'date', value: ymd(state.from), onChange: e => { state.from = parseYmd(e.target.value); onChange(state); } }), h('span', null, '→'),

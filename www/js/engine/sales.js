@@ -175,9 +175,9 @@ export function createSale(cart, payments, opts = {}) {
       rounding: c.rounding, discountTotal: c.subtotal - c.total, total: c.total, payments, cashGiven, change: cashGiven - cashPaid, paid: c.total - debt, debt,
       status: 'done', note: String(opts.note || cart.note || '').trim(), pointsEarned: earned, pointsUsed: c.pointsUsed, promoNames: c.promoNames, promoIds: c.promoIds, returnedTotal: 0
     });
-    for (const pid of c.promoIds) { const pr = S.mut('promos', pid); pr.used = (pr.used || 0) + 1; }
+    for (const pid of c.promoIds) { const pr = S.mutD('promos', pid); pr.used = (pr.used || 0) + 1; }
     if (customer) {
-      const cu = S.mut('customers', customer.id);
+      const cu = S.mutD('customers', customer.id);
       cu.totalSpent = (cu.totalSpent || 0) + c.total; cu.lastBuyAt = ts;
       if (earned) addPoints(customer.id, earned);
       if (c.pointsUsed) addPoints(customer.id, -c.pointsUsed);
@@ -200,7 +200,7 @@ export function voidSale(id, reason) {
     const sale = S.mut('sales', id);
     for (const it of sale.items) stockIn(it.productId, it.qtyBase, { type: 'cancel', retAlloc: it.alloc, refType: 'sale', ref: id, reason: 'Huỷ hoá đơn ' + sale.code, lot: 'HUY-' + sale.code });
     if (sale.customerId) {
-      const cu = S.mut('customers', sale.customerId);
+      const cu = S.mutD('customers', sale.customerId);
       cu.totalSpent = Math.max(0, (cu.totalSpent || 0) - sale.total);
       if (sale.pointsEarned) addPoints(cu.id, -sale.pointsEarned);
       if (sale.pointsUsed) addPoints(cu.id, sale.pointsUsed);
@@ -210,7 +210,7 @@ export function voidSale(id, reason) {
         if (e) S.mut('ledger', e.id).void = true;
       }
     }
-    for (const pid of (sale.promoIds || [])) { const pr = S.get('promos', pid); if (pr && pr.used > 0) S.mut('promos', pid).used--; }
+    for (const pid of (sale.promoIds || [])) { const pr = S.get('promos', pid); if (pr && pr.used > 0) S.mutD('promos', pid).used--; }
     Object.assign(sale, { status: 'void', voidReason: String(reason).trim(), voidAt: Date.now(), voidBy: currentUser().name });
     log('void', `Huỷ hoá đơn ${sale.code}: ${sale.voidReason}`, { ref: id });
     return sale;
@@ -273,7 +273,7 @@ export function createReturn(d) {
       customerName: customer ? customer.name : '', items, total, refund, restock, reason: String(d.reason || '').trim(), staffId: S.session.staffId, shiftId: shift ? shift.id : null });
     if (saleRec) saleRec.returnedTotal = (saleRec.returnedTotal || 0) + total;
     if (customer) {
-      const cu = S.mut('customers', customer.id); cu.totalSpent = Math.max(0, (cu.totalSpent || 0) - total);
+      const cu = S.mutD('customers', customer.id); cu.totalSpent = Math.max(0, (cu.totalSpent || 0) - total);
       if (toDebt) ledgerAdd('customer', customer.id, -toDebt, { type: 'return', refId: rid, refType: 'return', note: code });
     }
     log('return', `Trả hàng ${code}: ${total}đ${restock ? '' : ' (không nhập lại kho)'}`, { ref: rid });

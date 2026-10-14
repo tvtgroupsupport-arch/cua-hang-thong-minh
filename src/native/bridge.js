@@ -10,6 +10,7 @@ import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning';
 import { ScreenBrightness } from '@capacitor-community/screen-brightness';
 import { Haptics } from '@capacitor/haptics';
 import { CapacitorThermalPrinter } from 'capacitor-thermal-printer';
+import { Browser } from '@capacitor/browser';
 
 const isNative = Capacitor.isNativePlatform();
 
@@ -115,4 +116,7 @@ const printer = {
   }
 };
 
-window.NativeBridge = { isNative, platform: Capacitor.getPlatform(), scan, saveFile, shareText, where, brightness, haptics, app, printer };
+/* ---------- Mở trang web ngoài (hướng dẫn tạo Supabase…) ---------- */
+const openUrl = url => { if (!String(url).toLowerCase().startsWith('https://')) throw new Error('Chỉ mở được địa chỉ https'); return Browser.open({ url }); };
+
+window.NativeBridge = { isNative, platform: Capacitor.getPlatform(), scan, saveFile, shareText, where, brightness, haptics, app, printer, openUrl };

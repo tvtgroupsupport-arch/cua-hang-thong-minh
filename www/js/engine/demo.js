@@ -11,6 +11,17 @@ import { log } from './auth.js';
 
 // [tên, nhóm, đơn vị, giá vốn, giá bán, đơn vị lớn?[tên,hệ số,giá], tuỳ chọn]
 const CATS = ['Đồ uống', 'Mì & thực phẩm khô', 'Sữa & bánh kẹo', 'Gia vị & dầu ăn', 'Hóa phẩm & gia dụng', 'Rau củ & thịt (cân)'];
+/* Ảnh minh hoạ cho dữ liệu mẫu: biểu tượng cảm xúc trên nền pastel, dạng SVG nhúng sẵn (không cần mạng, chỉ vài trăm byte). */
+const EMOJI = [['red bull', '⚡'], ['bia', '🍺'], ['coca', '🥤'], ['pepsi', '🥤'], ['nước ngọt', '🥤'], ['nước suối', '💧'], ['trà', '🍵'], ['cà phê', '☕'], ['sữa chua', '🍦'], ['sữa', '🥛'], ['mì', '🍜'], ['phở', '🍜'], ['miến', '🍜'], ['bún', '🍜'], ['nui', '🍝'], ['cháo', '🥣'],
+  ['oreo', '🍪'], ['bánh mì', '🍞'], ['bánh', '🍪'], ['kẹo', '🍬'], ['snack', '🍿'], ['dầu ăn', '🫒'], ['nước mắm', '🍶'], ['nước tương', '🍶'], ['tương ớt', '🌶️'], ['đường', '🧂'], ['muối', '🧂'], ['hạt nêm', '🧂'], ['bột ngọt', '🧂'],
+  ['rửa chén', '🧽'], ['bột giặt', '🧺'], ['dầu gội', '🧴'], ['kem đánh răng', '🪥'], ['giấy', '🧻'], ['xà phòng', '🧼'], ['gạo', '🍚'], ['thịt', '🥩'], ['trứng', '🥚'], ['cà chua', '🍅'], ['hành', '🧅']];
+const BG = ['#ece9ff', '#ddf7ee', '#ffe9e0', '#e0f0ff', '#fff1c9', '#ffe4ef', '#e0f8fb', '#efe3ff'];
+export function demoImage(name, i = 0) {
+  const n = name.toLowerCase(), e = (EMOJI.find(([k]) => n.includes(k)) || [0, '🛒'])[1];
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 96"><rect width="120" height="96" fill="${BG[i % BG.length]}"/><text x="60" y="66" font-size="54" text-anchor="middle">${e}</text></svg>`;
+  return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
+}
+
 const P = [
   ['Nước ngọt Coca-Cola lon 330ml', 0, 'lon', 7500, 10000, ['Thùng 24 lon', 24, 230000]],
   ['Nước ngọt Pepsi lon 330ml', 0, 'lon', 7300, 10000, ['Thùng 24 lon', 24, 225000]],
@@ -72,7 +83,7 @@ export function loadDemo({ days = 30, now = Date.now() } = {}) {
     const [name, ci, unit, cost, price, big, opt = {}] = r;
     const units = [{ name: unit, factor: 1, price, wholesale: Math.round(price * 0.93 / 100) * 100, wholesaleMin: big ? 12 : 0, barcodes: opt.weight ? [] : [ean13Check('893456' + String(100000 + i).slice(-6))] }];
     if (big) units.push({ name: big[0], factor: big[1], price: big[2], barcodes: [ean13Check('893457' + String(100000 + i).slice(-6))] });
-    const p = saveProduct({ name, categoryId: cats[ci].id, units, cost: 0, kind: opt.weight ? 'weight' : 'count', plu: opt.plu || '', minStock: opt.weight ? 10 : 12, trackBatch: !!opt.batch });
+    const p = saveProduct({ name, categoryId: cats[ci].id, image: demoImage(name, ci), units, cost: 0, kind: opt.weight ? 'weight' : 'count', plu: opt.plu || '', minStock: opt.weight ? 10 : 12, trackBatch: !!opt.batch });
     S.tx(() => { S.mut('products', p.id).demo = true; S.mut('products', p.id).cost = cost; });
     prods.push({ p, r, opt });
   });

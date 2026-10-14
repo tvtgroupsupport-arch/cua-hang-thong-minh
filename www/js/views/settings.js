@@ -107,6 +107,7 @@ export function viewSettings(root, ctx) {
     if (ok !== false) { S.setMeta('lastBackup', Date.now()); await S.flush(); toast('Đã sao lưu', 'ok'); }
   }
   async function restore() {
+    if (S.syncOn) return toast('Đang bật đồng bộ nhiều máy — hãy ngắt đồng bộ (Thêm → Đồng bộ nhiều máy) trước khi khôi phục sao lưu.', 'error', 6000);
     const f = await pickFile('.json,application/json'); if (!f) return;
     let dump; try { dump = JSON.parse(await readFileText(f)); } catch (e) { return toast('Tệp không đọc được', 'error'); }
     if (!dump || dump.app !== 'taphoa') return toast('Đây không phải tệp sao lưu của ứng dụng', 'error');
@@ -127,6 +128,7 @@ export function viewSettings(root, ctx) {
     h('button', { class: 'btn', disabled: E.demoLoaded(), onClick: async () => { if (!(await confirmBox('Nạp ~45 mặt hàng, khách hàng, nhà cung cấp và 30 ngày bán hàng mẫu để dùng thử?\nDữ liệu mẫu sẽ lẫn với dữ liệu thật – chỉ nên dùng khi mới bắt đầu.', { okText: 'Nạp dữ liệu mẫu' }))) return; toast('Đang nạp…'); await new Promise(r => setTimeout(r, 40)); const r = await guard(async () => (E.loadDemo({}), true)); if (r) { toast('Đã nạp dữ liệu mẫu', 'ok'); ctx.go('pos'); } } }, E.demoLoaded() ? 'Đã nạp dữ liệu mẫu' : 'Nạp dữ liệu mẫu để dùng thử'),
     h('button', { class: 'btn danger', onClick: wipe }, 'Xoá toàn bộ dữ liệu & làm lại từ đầu'))) : null;
   async function wipe() {
+    if (S.syncOn) return toast('Đang bật đồng bộ nhiều máy — hãy ngắt đồng bộ trước khi xoá toàn bộ dữ liệu.', 'error', 6000);
     if (!(await confirmBox('XOÁ TOÀN BỘ hàng hóa, hoá đơn, khách hàng, nhân viên…? Không thể hoàn tác!\nHãy sao lưu trước.', { danger: true, okText: 'Tiếp tục' }))) return;
     const t = await promptBox({ title: 'Xác nhận xoá', label: 'Gõ chữ XOA để xác nhận xoá toàn bộ dữ liệu' }); if (!t || t.trim().toUpperCase() !== 'XOA') return toast('Đã huỷ', '');
     await S.wipe(); S.session.staffId = null; try { localStorage.clear(); } catch (e) {} location.hash = ''; location.reload();

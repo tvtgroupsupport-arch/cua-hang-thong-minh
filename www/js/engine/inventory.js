@@ -6,7 +6,9 @@ import { stockIn, stockOut, adjustTo } from './stockcore.js';
 import { ledgerAdd } from './people.js';
 import { unitOf } from './products.js';
 
-export const nextCode = (prefix, ts = Date.now()) => `${prefix}${ymd(ts).replace(/-/g, '').slice(2)}-${String(S.nextSeq(prefix + ymd(ts))).padStart(3, '0')}`;
+/** Mã máy (A, B, C…) khi đã bật đồng bộ: gắn vào mã chứng từ/SKU để hai máy cùng bán/nhập offline không bao giờ trùng mã. */
+export const deviceTag = () => (S.meta.sync && S.meta.sync.enabled && S.meta.sync.tag) || '';
+export const nextCode = (prefix, ts = Date.now()) => `${prefix}${ymd(ts).replace(/-/g, '').slice(2)}-${deviceTag()}${String(S.nextSeq(prefix + ymd(ts))).padStart(3, '0')}`;
 
 /* ---------- Nhập hàng ---------- */
 export function createPurchase(d) {

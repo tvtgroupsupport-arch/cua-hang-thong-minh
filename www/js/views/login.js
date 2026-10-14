@@ -2,6 +2,7 @@
 import { S } from '../store.js';
 import * as E from '../engine/index.js';
 import { h, icon, mount, field, guard, toast, checkbox } from '../ui.js';
+import { joinDialog } from './sync.js';
 
 const logo = () => h('div', { class: 'logo' }, icon('shop'));
 
@@ -61,6 +62,7 @@ function setup(root, done) {
     h('div', { class: 'card' }, h('h3', null, 'Cửa hàng'), field('Tên cửa hàng', f.name), field('Địa chỉ', f.address), field('Điện thoại', f.phone)),
     h('div', { class: 'card' }, h('h3', null, 'Tài khoản chủ cửa hàng'), field('Họ tên', f.owner), field('Tên đăng nhập', f.user), field('Mật khẩu', f.pw), field('Nhập lại mật khẩu', f.pw2)),
     h('div', { class: 'mt8' }, demo), h('button', { class: 'btn primary lg block mt8', onClick: submit }, 'Bắt đầu sử dụng'),
+    h('button', { class: 'btn ghost block mt12', onClick: () => joinDialog(() => { location.hash = '#/login'; location.reload(); }) }, icon('cloud', 18), ' Đã có cửa hàng? Kết nối máy này bằng mã đồng bộ'),
     h('p', { class: 'center muted tiny mt12' }, 'Dữ liệu lưu ngay trên thiết bị này, dùng được khi mất mạng. Hãy sao lưu định kỳ trong Cài đặt.')));
   setTimeout(() => f.name.focus(), 50);
 }

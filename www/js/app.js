@@ -16,6 +16,8 @@ import { viewPromos } from './views/promos.js';
 import { viewCash } from './views/cash.js';
 import { viewSettings, viewStaff, viewLogs } from './views/settings.js';
 import { viewExport } from './views/export.js';
+import { viewSync } from './views/sync.js';
+import * as Sync from './sync/engine.js';
 
 const SESSION_KEY = 'taphoa.staff';
 /* path, tiêu đề, quyền cần có (một trong), mục nav */
@@ -34,6 +36,7 @@ const ROUTES = {
   staff: { title: 'Nhân viên & quyền', perm: ['manageStaff'], nav: 'more', view: viewStaff },
   logs: { title: 'Nhật ký hoạt động', perm: ['settings', 'manageStaff'], nav: 'more', view: viewLogs },
   export: { title: 'Xuất báo cáo', perm: ['viewReports', 'manageStock', 'cashbook', 'manageProducts'], nav: 'reports', view: viewExport },
+  sync: { title: 'Đồng bộ nhiều máy', perm: [], nav: 'more', view: viewSync },
   help: { title: 'Hướng dẫn', perm: [], nav: 'more', view: viewHelp }
 };
 const NAV = [['pos', 'Bán hàng', 'cart'], ['products', 'Hàng hóa', 'box'], ['stock', 'Kho', 'warehouse'], ['reports', 'Báo cáo', 'chart'], ['more', 'Thêm', 'menu']];
@@ -47,14 +50,16 @@ const allowed = r => !r.perm.length || r.perm.some(p => E.can(p));
 function buildShell() {
   const title = h('h1'), actions = h('div', { class: 'row', style: { gap: '2px' } }), main = h('div', { class: 'main' });
   const nav = h('nav', { class: 'bottomnav' });
+  const syncBtn = h('button', { class: 'iconbtn sync-btn hide', title: 'Đồng bộ nhiều máy', 'aria-label': 'Đồng bộ', onClick: () => go('sync') });
 
   const root = h('div', { class: 'shell' }, nav,
     h('div', { class: 'content' },
-      h('header', { class: 'topbar' }, title, actions,
+      h('header', { class: 'topbar' }, title, actions, syncBtn,
         h('button', { class: 'iconbtn', title: 'Khoá / đổi người dùng', 'aria-label': 'Khoá', onClick: lock }, icon('lock'))),
       main));
   mount(app, root);
-  shell = { root, title, actions, main, nav };
+  shell = { root, title, actions, main, nav, syncBtn };
+  updateSyncBtn();
   renderNav();
 
 }
@@ -146,6 +151,8 @@ async function boot() {
     if (S.persistError && Date.now() - lastPersistWarn > 30000) { lastPersistWarn = Date.now(); toast('CẢNH BÁO: không ghi được dữ liệu vào bộ nhớ (' + (S.persistError.message || 'lỗi') + '). Hãy sao lưu ngay!', 'error', 10000); }
   }, 500));
   onBack(handleBack);
+  Sync.onStatus(updateSyncBtn); Sync.onDataChanged(debounce(refreshView, 400));
+  if (Sync.isEnabled()) Sync.start();
   installSwipe(); installAutoCenter();
   window.__app = { S, E, go };
   const native = isNative();
@@ -153,3 +160,21 @@ async function boot() {
   route();
 }
 boot();
+
+/* ---------- Đồng bộ: biểu tượng trạng thái trên thanh trên + làm mới màn hình khi có dữ liệu từ máy khác ---------- */
+function updateSyncBtn() {
+  if (!shell || !shell.syncBtn) return;
+  const st = Sync.getStatus(), b = shell.syncBtn;
+  b.classList.toggle('hide', !st.enabled);
+  if (!st.enabled) return;
+  b.className = 'iconbtn sync-btn ' + (st.running ? 'busy' : st.error ? 'err' : st.pending ? 'pend' : 'ok');
+  b.title = st.running ? 'Đang đồng bộ…' : st.error ? 'Lỗi đồng bộ — chạm để xem' : st.pending ? `Chờ gửi ${st.pending} thay đổi` : 'Đã đồng bộ';
+  mount(b, icon('cloud'), st.pending && !st.running ? h('span', { class: 'dot' }, st.pending > 99 ? '99+' : st.pending) : null);
+}
+function refreshView() {
+  // dữ liệu mới từ máy khác: vẽ lại màn hình hiện tại, trừ khi người dùng đang gõ/đang mở hộp thoại/đang có giỏ hàng mở
+  const a = document.activeElement;
+  if (document.querySelector('.overlay, .cartpage.open') || (a && /^(input|textarea|select)$/i.test(a.tagName))) return;
+  if (shell) renderNav();
+  route();
+}

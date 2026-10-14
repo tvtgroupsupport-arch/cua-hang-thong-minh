@@ -57,7 +57,7 @@ export function deleteSupplier(id) {
 export function ledgerAdd(party, partyId, amount, o = {}) {
   amount = rnd(amount); if (!amount) return null;
   const coll = party === 'customer' ? 'customers' : 'suppliers';
-  const p = S.mut(coll, partyId);
+  const p = S.mutD(coll, partyId);
   p.debt = rnd((p.debt || 0) + amount);
   return S.add('ledger', { party, partyId, ts: o.ts || Date.now(), amount, balance: p.debt, type: o.type || 'adjust', refId: o.refId || null, refType: o.refType || null,
     method: o.method || null, note: o.note || '', staffId: S.session.staffId });
@@ -124,7 +124,7 @@ export function oldestDebtAge(party, partyId, now = Date.now()) {
 
 /* ---------- Điểm thưởng ---------- */
 export function addPoints(customerId, pts) {
-  const c = S.mut('customers', customerId);
+  const c = S.mutD('customers', customerId);
   c.points = Math.max(0, Math.round((c.points || 0) + pts));
   return c.points;
 }

@@ -78,3 +78,19 @@ Tách riêng **danh sách sản phẩm** và **giỏ hàng**: màn hình chính 
 - **Vuốt ngang để chuyển tab/danh mục** (làm theo app BEPO): vuốt trái/phải trên màn hình hoặc hộp thoại để nhảy sang tab kế bên (Kho, Báo cáo, Sổ quỹ, Hoá đơn, chi tiết khách…) và đổi danh mục hàng ở màn Bán hàng/Hàng hóa. Không bắt cử chỉ khi vuốt trong bảng/thanh chip cuộn ngang, ô nhập hoặc trang giỏ hàng. Tab/danh mục đang chọn **tự cuộn ra giữa** thanh tab.
 - **Danh sách ngân hàng VietQR đầy đủ:** tải trực tiếp từ API VietQR (khoảng 47–55 ngân hàng), lưu lại để dùng offline, có danh sách rút gọn 44 ngân hàng dự phòng và nút "Thử lại"; chọn bằng hộp thoại có ô tìm theo tên/mã BIN.
 - **Biểu đồ:** số liệu hiện ngay trên đầu cột (khi ít cột), nhãn trục ngay dưới biểu đồ và một khung chi tiết đặt liền dưới biểu đồ (chạm hoặc kéo ngang để xem từng cột: doanh thu, số hoá đơn, trung bình/hoá đơn, lãi gộp); tab Doanh thu có thêm bảng chi tiết từng ngày/tháng.
+
+## Đồng bộ nhiều máy bằng Supabase miễn phí (bản 1.5)
+Dùng chung dữ liệu giữa điện thoại chủ, thu ngân, thủ kho… trên **dự án Supabase gói Free của chính bạn**. Mất mạng vẫn bán bình thường (mọi thay đổi xếp hàng đợi, lưu bền), có mạng thì tự đồng bộ nền (mỗi 30 giây, khi mở lại app, khi có mạng trở lại, 4 giây sau mỗi thay đổi). Biểu tượng đám mây trên thanh trên báo trạng thái (xanh = đã đồng bộ, vàng = chờ gửi, đỏ = lỗi).
+
+**Thiết lập (chủ cửa hàng, ~5 phút):** *Thêm → Đồng bộ nhiều máy* — (1) tạo dự án Supabase miễn phí; (2) bấm *Sao chép script SQL* rồi dán vào Supabase → SQL Editor → Run; (3) nhập Project URL + khoá anon/publishable → *Kết nối & đồng bộ lần đầu*. **Thêm máy:** bấm *Thêm máy* → app cho một mã (và mã QR) → trên máy mới chọn *Máy thứ hai (có mã)* (hoặc ở màn thiết lập lần đầu: "Đã có cửa hàng?") quét/dán mã. Thu hồi từng máy ngay trong màn này.
+
+**Thiết kế (rút kinh nghiệm từ BEPO):**
+- Hai bảng trên Supabase bị khoá hoàn toàn (RLS), chỉ truy cập qua các hàm SQL kiểm tra **khoá riêng của từng thiết bị** (máy chủ chỉ giữ bản băm SHA-256) — khoá anon công khai không đủ để đọc/ghi dữ liệu. Máy "nhân viên" không ghi được tài khoản nhân viên/cài đặt và không xoá được dữ liệu; máy chủ trả lại bản đúng để máy đó tự sửa lại.
+- Đồng bộ theo từng bản ghi, bản có mốc `updatedAt` mới hơn thắng; xoá được truyền bằng "bia mộ".
+- **Tồn kho, tồn theo lô, công nợ, điểm, lượt dùng khuyến mãi không đồng bộ trực tiếp** mà mỗi máy tự tính lại từ sổ biến động kho / sổ nợ / hoá đơn (chỉ-thêm) → hai máy cùng bán một mặt hàng khi mất mạng vẫn ra đúng tồn, không ghi đè nhau.
+- Mã hoá đơn/phiếu/SKU gắn mã máy (VD `HD261014-B003`) để không trùng giữa các máy.
+- Nhật ký hoạt động và đơn treo là của riêng từng máy. Khoá kết nối không nằm trong tệp sao lưu; khi đang đồng bộ, *Khôi phục sao lưu* và *Xoá toàn bộ dữ liệu* bị chặn.
+- Giữ Supabase Free không bị tạm dừng (7 ngày không hoạt động): app tự gọi mỗi lần đồng bộ; thêm workflow `.github/workflows/keepalive.yml` (đặt Secrets `SUPABASE_URL`, `SUPABASE_ANON_KEY`) nếu cửa hàng có thể nghỉ dài ngày.
+
+**Kiểm thử:** `test/sync.html` chạy **script SQL thật trên Postgres (PGlite/WebAssembly)** cùng 2–3 "thiết bị" giả lập: cài script (2 lần), khoá sai/anon bị chặn, đẩy–kéo nhiều trang, bán đồng thời trên hai máy, sửa trùng bản ghi, xoá lan truyền, giới hạn quyền máy nhân viên, thu hồi/cấp lại, mất mạng rồi phục hồi, tắt mở app giữa chừng (12 kiểm tra, cần mạng để tải PGlite).
+**Chưa kiểm chứng:** chưa chạy với dự án Supabase thật qua mạng (đường truyền HTTP `/rest/v1/rpc/*` và cách xử lý lỗi 401/404/tạm dừng viết theo tài liệu PostgREST); lệch đồng hồ giữa các máy lớn có thể làm "bản mới hơn" chọn sai — hãy để điện thoại tự cập nhật giờ.
