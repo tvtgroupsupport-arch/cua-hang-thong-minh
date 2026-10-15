@@ -36,6 +36,9 @@ jobs:
           node scripts/patch-android.mjs > /tmp/step.log 2>&1; rc=$?
           cat /tmp/step.log
           if [ $rc -ne 0 ]; then echo "::error title=patch-android lỗi::$(tail -c 900 /tmp/step.log | tr '\n' '|' | tr -d '%\r')"; exit $rc; fi
+      - name: Dùng khoá ký cố định (nếu có) để các bản APK cài đè lên nhau được
+        run: |
+          if [ -f android-debug.keystore.b64 ]; then mkdir -p ~/.android && base64 -d android-debug.keystore.b64 > ~/.android/debug.keystore && echo "Dùng khoá ký cố định"; else echo "::warning::Chưa có android-debug.keystore.b64 — APK ký bằng khoá ngẫu nhiên, không cài đè được"; fi
       - name: Biên dịch APK (debug — cài thẳng được lên điện thoại)
         working-directory: android
         run: |
