@@ -28,7 +28,8 @@ const colLetter = n => { let s = ''; while (n > 0) { const m = (n - 1) % 26; s =
 /** Giá trị ô theo kiểu cột: ngày/giờ → Date, số → Number, còn lại chuỗi. Rỗng → null. */
 function cellValue(v, t) {
   if (v === '' || v == null) return null;
-  if (t === 'date' || t === 'datetime') return typeof v === 'number' ? new Date(v) : v;
+  // ExcelJS ghi ngày giờ theo UTC còn Excel hiển thị y nguyên số đó → phải đổi giờ ĐỊA PHƯƠNG thành "giờ UTC giả" (cùng giờ-phút trên đồng hồ), nếu không hoá đơn lúc 02:44 sáng 14/9 sẽ hiện thành 13/09 19:44 ở múi giờ +7.
+  if (t === 'date' || t === 'datetime') { if (typeof v !== 'number') return v; const d = new Date(v); return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes(), d.getSeconds())); }
   if (isNum(t)) return typeof v === 'number' ? v : (Number(v) || 0);
   return String(v);
 }

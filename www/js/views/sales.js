@@ -21,10 +21,10 @@ export function viewSales(root, ctx) {
         select([['', 'Tất cả'], ['done', 'Hoàn thành'], ['void', 'Đã huỷ']], status, { style: { width: 'auto' }, onChange: e => { status = e.target.value; draw(); } })) : null);
     const r = range();
     if (tab === 'sales') {
-      const list = E.listSales({ from: r.from, to: r.to, status, q, limit: 400 });
+      const list = E.listSales({ from: r.from, to: r.to, status, q, limit: 1e6 });
       const done = list.filter(s => s.status === 'done');
       mount(listBox, h('div', { class: 'row between small muted mb8' }, h('span', null, `${list.length} hoá đơn`), h('span', null, 'Doanh thu: ', h('b', null, fmtMoney(done.reduce((a, s) => a + s.total - (s.returnedTotal || 0), 0))))),
-        list.length ? h('div', { class: 'list' }, list.map(s => h('div', { class: 'item click', onClick: () => openSale(s.id) },
+        list.length ? h('div', { class: 'list' }, list.slice(0, 400).map(s => h('div', { class: 'item click', onClick: () => openSale(s.id) },
           h('div', { class: 'grow' }, h('div', { class: 'ttl' }, s.code, ' ', s.status === 'void' ? badge('Đã huỷ', 'red') : null, s.returnedTotal ? badge('Có trả hàng', 'amber') : null, s.debt > 0 && s.status === 'done' ? badge('Nợ ' + fmtNum(s.debt), 'red') : null),
             h('div', { class: 'sub' }, `${fmtDateTime(s.ts)} · ${s.customerName || 'Khách lẻ'} · ${s.staffName} · ${s.items.length} mặt hàng`)),
           h('div', { class: 'bold nowrap' + (s.status === 'void' ? ' muted' : '') }, fmtMoney(s.total))))) : empty('Không có hoá đơn nào'));

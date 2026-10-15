@@ -178,7 +178,7 @@ export function createSale(cart, payments, opts = {}) {
     for (const pid of c.promoIds) { const pr = S.mutD('promos', pid); pr.used = (pr.used || 0) + 1; }
     if (customer) {
       const cu = S.mutD('customers', customer.id);
-      cu.totalSpent = (cu.totalSpent || 0) + c.total; cu.lastBuyAt = ts;
+      cu.totalSpent = (cu.totalSpent || 0) + c.total; cu.lastBuyAt = Math.max(cu.lastBuyAt || 0, ts);
       if (earned) addPoints(customer.id, earned);
       if (c.pointsUsed) addPoints(customer.id, -c.pointsUsed);
       if (debt > 0) ledgerAdd('customer', customer.id, debt, { type: 'sale', refId: id, refType: 'sale', ts, note: code });
@@ -202,6 +202,7 @@ export function voidSale(id, reason) {
     if (sale.customerId) {
       const cu = S.mutD('customers', sale.customerId);
       cu.totalSpent = Math.max(0, (cu.totalSpent || 0) - sale.total);
+      cu.lastBuyAt = S.list('sales').filter(x => x.customerId === cu.id && x.status === 'done' && x.id !== id).reduce((m, x) => Math.max(m, x.ts), 0);   // lần mua gần nhất tính lại sau khi huỷ
       if (sale.pointsEarned) addPoints(cu.id, -sale.pointsEarned);
       if (sale.pointsUsed) addPoints(cu.id, sale.pointsUsed);
       if (sale.debt > 0) {

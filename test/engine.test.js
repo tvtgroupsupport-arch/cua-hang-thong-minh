@@ -4,6 +4,7 @@ import { _tables, ean13, ean8, eanValid, encodeAuto, code128, C128 } from '../ww
 import { modelFromSale, layoutReceipt, wrap, PAPER } from '../www/js/receipt-image.js';
 import { layoutLabel } from '../www/js/label.js';
 import { buildWorkbook, buildCsv } from '../www/js/xlsx-export.js';
+import * as Sync from '../www/js/sync/engine.js';
 import { ean13Check, DAY, dayStart, toCsv, parseCsv, norm, parseMoney, fmtMoney } from '../www/js/util.js';
 
 const tests = [];
@@ -682,6 +683,45 @@ test('xuất CSV dự phòng: có BOM, tiêu đề và dữ liệu đúng', asyn
   const csv = buildCsv(specs, { store: 'Quán', title: 'T', rangeLabel: 'R', at: Date.now() });
   ok(csv.startsWith('\ufeff')); ok(csv.includes('Mã HĐ')); ok(csv.includes('"Mì, gói ""đặc biệt"""'));
   eq(parseCsv(csv).filter(r => r[0] === 'Mã HĐ').length, 1);
+});
+
+test('xuất Excel: khoảng ngày lọc đúng ranh giới và giờ trong tệp trùng giờ địa phương (lỗi lệch múi giờ: 02:44 14/9 hiện thành 13/9)', async () => {
+  await fresh();
+  const p = prod({ stock: 100 });
+  const at = (d, h, m, s = 0) => new Date(2026, 8, d, h, m, s).getTime();               // 2026-09-dd giờ địa phương
+  const times = [at(13, 23, 59, 59), at(14, 0, 0), at(14, 2, 44), at(15, 23, 59, 59), at(16, 0, 0)];
+  times.forEach(ts => { const c = E.calcCart({ lines: [L(p, 1)] }); E.createSale({ lines: [L(p, 1)] }, [{ method: 'cash', amount: c.total }], { ts }); });
+  const from = at(14, 0, 0), to = at(15, 23, 59, 59) + 999;
+  const spec = E.buildReport('sales', from, to)[0];
+  eq(spec.rows.length, 3, 'chỉ 3 hoá đơn trong 14–15/9 (không có 13/9 23:59 và 16/9 00:00)');
+  ok(spec.rows.every(r => r[1] >= from && r[1] <= to));
+  const wb = buildWorkbook(window.ExcelJS, [spec], { store: 'T', at: Date.now() });
+  const back = new window.ExcelJS.Workbook(); await back.xlsx.load(await wb.xlsx.writeBuffer());
+  const ws = back.getWorksheet('Hoá đơn'); let hr = 0; ws.eachRow((row, n) => { if (!hr && row.getCell(1).value === 'Mã HĐ') hr = n; });
+  spec.rows.forEach((r, i) => {
+    const v = ws.getRow(hr + 1 + i).getCell(2).value, d = new Date(r[1]);
+    eq([v.getUTCFullYear(), v.getUTCMonth(), v.getUTCDate(), v.getUTCHours(), v.getUTCMinutes()], [d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes()], 'ngày giờ trong tệp = giờ địa phương của hoá đơn');
+  });
+  eq(E.summary(from, to).bills, 3, 'báo cáo tổng hợp cùng khoảng ngày cũng đúng');
+});
+
+test('lưu trữ chính xác: sau khi nạp lại từ bộ nhớ lưu trữ, TOÀN BỘ dữ liệu giống hệt; các số suy ra khớp sổ gốc', async () => {
+  const ad = memoryAdapter();
+  await S.init(ad);
+  await E.setupStore({ store: { name: 'Quán' }, owner: { username: 'chu', password: '1234' } });
+  E.loadDemo({ days: 12 });
+  const s = E.listSales({ limit: 1e6 }).find(x => x.status === 'done' && x.items.length);
+  E.createReturn({ saleId: s.id, items: [{ lineIndex: 0, qty: 1 }] });
+  const s2 = E.listSales({ limit: 1e6 }).filter(x => x.status === 'done' && !x.returnedTotal)[3]; E.voidSale(s2.id, 'kiểm thử');
+  eq(Sync.recomputeDerived(), 0, 'tồn kho, lô, nợ, điểm, lượt KM khớp sổ gốc (không cần tính lại)');
+  const before = JSON.stringify(S.dump().collections), meta0 = JSON.stringify(S.meta);
+  await S.flush();
+  await S.init(ad);                                  // mô phỏng tắt/mở lại app
+  eq(JSON.stringify(S.dump().collections), before, 'dữ liệu sau nạp lại = trước khi tắt');
+  eq(JSON.stringify(S.meta), meta0, 'cài đặt/bộ đếm cũng giống hệt');
+  const t0 = dayStart(Date.now()) - 12 * DAY; const sm = E.summary(t0, Date.now() + DAY);
+  eq(sm.gross, S.list('sales').filter(x => x.status === 'done').reduce((a, x) => a + x.total, 0), 'doanh thu gộp = Σ hoá đơn');
+  eq(sm.returns, S.list('sales').filter(x => x.status === 'done').reduce((a, x) => a + (x.returnedTotal || 0), 0));
 });
 
 /* ============ Chạy ============ */
