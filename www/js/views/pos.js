@@ -80,11 +80,31 @@ export function viewPos(root, ctx) {
     if (hit) { if (hit.qty) addLine(hit.product, hit.unit, hit.qty); else if (hit.product.kind === 'weight') await addProductTap(hit.product); else addLine(hit.product, hit.unit, 1); return true; }
     return false;
   }
+  /** Quét bằng camera: chỉ đọc MỘT lần rồi dừng, hiện thông tin sản phẩm để người bán chỉnh số lượng rồi mới thêm vào giỏ (không tự cộng dồn). */
   async function scanLoop() {
-    await openScanner({ continuous: true, onCode: async code => {
-      if (!(await addByCode(code))) { beep('bad'); toast('Không tìm thấy mã ' + code, 'error'); }
-      return 'keep';
+    await openScanner({ continuous: false, onCode: async code => {
+      const hit = E.lookupBarcode(code);
+      if (!hit) { beep('bad'); toast('Không tìm thấy mã ' + code, 'error'); return; }
+      beep('ok'); setTimeout(() => scanConfirm(hit), 60);
     } });
+  }
+  function scanConfirm(hit) {
+    const p = hit.product; let unit = hit.unit, qty = hit.qty || 1;
+    const q = qtyInput(qty), info = h('div'), unitSel = p.units.length > 1 ? select(p.units.map(u => [u.id, u.name]), unit.id, { onChange: e => { unit = p.units.find(u => u.id === e.target.value); upd(); } }) : null;
+    const step = p.kind === 'weight' ? 0.1 : 1, cur = () => Math.max(0, parseQty(q.value));
+    const set = v => { q.value = String(Math.round(v * 1000) / 1000).replace('.', ','); upd(); };
+    const price = () => E.calcCart({ lines: [{ productId: p.id, unitId: unit.id, qty: cur() || 1 }] }).lines[0];
+    function upd() { const l = price(); mount(info, h('div', { class: 'row between' }, h('span', { class: 'muted' }, `${fmtMoney(l.price)} / ${unit.name}`), h('b', { class: 'pos-c' }, cur() ? fmtMoney(l.total) : '')),
+      p.stock < cur() * unit.factor ? h('div', { class: 'tiny warn-c mt8' }, `⚠ Tồn kho chỉ còn ${fmtNum(p.stock)} ${p.units[0].name}`) : null); }
+    q.addEventListener('input', upd);
+    const add = () => { const n = cur(); if (!(n > 0)) { toast('Nhập số lượng lớn hơn 0', 'error'); return false; } if (p.kind === 'count' && Math.abs(n - Math.round(n)) > 1e-9) { toast('Hàng đếm phải là số nguyên', 'error'); return false; } addLine(p, unit, n); };
+    modal({ title: 'Đã quét sản phẩm', body: h('div', null,
+      h('div', { class: 'row mb8' }, h('div', { class: 'thumb ' + tint(p.name), style: { width: '64px', height: '64px' } }, p.image ? h('img', { src: p.image }) : p.name.slice(0, 1).toUpperCase()),
+        h('div', { class: 'grow' }, h('div', { class: 'bold', style: { fontSize: '17px' } }, p.name), h('div', { class: 'small muted' }, `${p.sku} · Tồn ${fmtNum(p.stock)} ${p.units[0].name}`))),
+      unitSel ? field('Đơn vị', unitSel) : null,
+      field('Số lượng', h('div', { class: 'row' }, h('button', { class: 'btn', onClick: () => set(Math.max(0, cur() - step)) }, '−'), h('div', { class: 'grow' }, q), h('button', { class: 'btn', onClick: () => set(cur() + step) }, '+'))), info),
+      actions: [{ label: 'Huỷ' }, { label: 'Thêm & quét tiếp', onClick: () => { if (add() === false) return false; setTimeout(scanLoop, 150); } }, { label: 'Thêm vào giỏ', kind: 'primary', onClick: () => add() }] });
+    upd(); setTimeout(() => { q.focus(); q.select(); }, 80);
   }
 
   /* ---------- Tìm kiếm: lọc ngay trên lưới sản phẩm ---------- */
