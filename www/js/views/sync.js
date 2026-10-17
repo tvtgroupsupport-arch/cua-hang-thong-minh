@@ -6,7 +6,8 @@ import { h, icon, mount, modal, toast, guard, confirmBox, field, select, badge, 
 import { fmtDateTime } from '../util.js';
 import { copyText, openUrl, shareText, openScanner, canScan, isNative } from '../native.js';
 import { QR } from '../lib/qr.js';
-import { autoConnect } from '../sync/provision.js';
+import { autoConnect, oauthProvision, oauthAvailable } from '../sync/provision.js';
+import * as Central from '../cloud/central.js';
 
 const hostOf = u => { try { return new URL(u).host; } catch (e) { return u || ''; } };
 const ago = ts => { if (!ts) return 'chưa lần nào'; const s = Math.round((Date.now() - ts) / 1000); return s < 60 ? 'vừa xong' : s < 3600 ? Math.round(s / 60) + ' phút trước' : s < 86400 ? Math.round(s / 3600) + ' giờ trước' : fmtDateTime(ts); };
@@ -30,7 +31,27 @@ export function joinDialog(onDone) {
   void m;
 }
 
-/** Tự tạo dự án Supabase + liên kết (xem sync/provision.js). onDone() gọi khi liên kết xong. */
+/** Cách nhanh (như BEPO): đăng nhập tài khoản lưu trữ → bấm Authorize một lần trên trang Supabase → máy chủ trung tâm tự tạo dự án. */
+function oauthDialog(onDone) {
+  const bar = h('div', { style: { height: '8px', width: '0%', background: 'var(--accent, #7c5cff)', borderRadius: '6px', transition: 'width .3s' } });
+  const msg = h('div', { class: 'small mt8' }); let busy = false;
+  const go = async () => {
+    if (busy) return; busy = true; btn.disabled = true; msg.className = 'small mt8'; msg.textContent = 'Đang chuẩn bị…';
+    try {
+      await oauthProvision({ openUrl: u => openUrl(u), onProgress: (i, n, t) => { bar.style.width = Math.round(i / n * 100) + '%'; msg.textContent = t ? `Bước ${i}/${n}: ${t}` : ''; } });
+      Sync.start(); m.close && m.close(); toast('Đã tạo kho dữ liệu & liên kết xong — dữ liệu đã được đẩy lên', 'ok', 5000); onDone && onDone();
+    } catch (e) { msg.className = 'banner red mt8'; msg.textContent = e.message; btn.textContent = 'Tiếp tục / thử lại'; }
+    finally { busy = false; btn.disabled = false; }
+  };
+  const btn = h('button', { class: 'btn primary block mt8', onClick: go }, 'Bắt đầu');
+  const m = modal({ title: 'Tạo kho dữ liệu tự động', body: h('div', null,
+    h('div', { class: 'small mb8' }, 'App sẽ mở trang Supabase để bạn bấm ', h('b', null, 'Authorize'), ' một lần (đăng nhập hoặc đăng ký Supabase miễn phí nếu chưa có), rồi tự tạo dự án, cài hàm đồng bộ và liên kết. Mất khoảng 1–3 phút, đừng đóng app.'),
+    btn, h('div', null, h('div', { style: { height: '8px', background: 'rgba(128,128,128,.2)', borderRadius: '6px', overflow: 'hidden', marginTop: '10px' } }, bar), msg),
+    h('div', { class: 'banner mt8 small' }, 'An toàn: app không cầm token của Supabase — token chỉ nằm tạm trên máy chủ gói cước và bị xoá ngay khi xong. Nếu Supabase báo "No organizations found": tạo một organization (gói Free) rồi bấm Tiếp tục.')),
+    actions: [{ label: 'Đóng' }] });
+}
+
+/** Tự tạo dự án Supabase + liên kết bằng mã truy cập cá nhân (xem sync/provision.js). onDone() gọi khi liên kết xong. */
 function autoDialog(onDone) {
   const token = h('input', { class: 'input', type: 'password', autocomplete: 'off', autocapitalize: 'none', placeholder: 'sbp_…' });
   const orgSel = h('div'), bar = h('div', { style: { height: '8px', width: '0%', background: 'var(--accent, #7c5cff)', borderRadius: '6px', transition: 'width .3s' } });
@@ -85,7 +106,9 @@ export function viewSync(root, ctx) {
       : h('div', { class: 'mt12' },
         h('div', { class: 'card' }, h('div', { class: 'bold mb8' }, '⚡ Tự động liên kết Supabase'),
           h('div', { class: 'small mb8' }, 'App tự tạo dự án Supabase, cài hàm đồng bộ và liên kết giúp bạn — không cần chép script hay khoá. Bạn chỉ cần tài khoản Supabase miễn phí và một mã truy cập cá nhân.'),
-          h('button', { class: 'btn primary block', onClick: () => { if (!E.can('settings')) return toast('Chỉ chủ cửa hàng mới thiết lập được', 'error'); autoDialog(draw); } }, icon('cloud', 18), ' Tự động tạo & liên kết'),
+          oauthAvailable() ? h('button', { class: 'btn primary block mb8', onClick: () => { if (!E.can('settings')) return toast('Chỉ chủ cửa hàng mới thiết lập được', 'error'); oauthDialog(draw); } }, icon('cloud', 18), ' Tạo tự động (chỉ bấm đồng ý một lần)')
+            : Central.configured() ? h('a', { class: 'banner small mb8', href: '#/plan', style: { display: 'block', textDecoration: 'none', color: 'inherit' } }, 'Cách nhanh nhất: đăng nhập tài khoản lưu trữ ở ', h('b', null, 'Thêm → Gói cước & tài khoản'), ' rồi quay lại đây →') : null,
+          h('button', { class: 'btn ' + (oauthAvailable() ? '' : 'primary ') + 'block', onClick: () => { if (!E.can('settings')) return toast('Chỉ chủ cửa hàng mới thiết lập được', 'error'); autoDialog(draw); } }, icon('cloud', 18), oauthAvailable() ? ' Hoặc dùng mã truy cập cá nhân' : ' Tự động tạo & liên kết (mã truy cập cá nhân)'),
           h('div', { class: 'small muted mt8' }, 'Hoặc làm thủ công theo 3 bước dưới đây.')),
         step(1,'Tạo dự án Supabase miễn phí', h('div', { class: 'small' }, 'Đăng ký bằng GitHub/Google → New project → đặt tên & mật khẩu cơ sở dữ liệu → vùng gần nhất (Singapore) → gói Free. Chờ ~2 phút cho dự án khởi tạo.'),
           h('button', { class: 'btn mt8', onClick: () => openUrl('https://supabase.com/dashboard/new') }, icon('cloud', 18), ' Mở Supabase')),

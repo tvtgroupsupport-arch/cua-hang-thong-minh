@@ -7,7 +7,7 @@ import { fmtMoney, fmtDateTime } from '../util.js';
 const ITEMS = [
   ['sales', 'Hoá đơn & trả hàng', 'receipt', ['sell', 'viewReports']], ['customers', 'Khách hàng & nợ', 'users', ['manageCustomers', 'sell']], ['suppliers', 'Nhà cung cấp & nợ', 'truck', ['manageSuppliers']],
   ['promos', 'Khuyến mãi', 'tag', ['managePromos', 'sell']], ['cash', 'Sổ quỹ & ca làm việc', 'wallet', ['cashbook']], ['staff', 'Nhân viên & quyền', 'user', ['manageStaff']],
-  ['sync', 'Đồng bộ nhiều máy', 'cloud', []], ['export', 'Xuất báo cáo Excel', 'download', ['viewReports', 'manageStock', 'cashbook', 'manageProducts']], ['settings', 'Cài đặt & sao lưu', 'settings', ['settings']], ['logs', 'Nhật ký hoạt động', 'list', ['settings', 'manageStaff']], ['help', 'Hướng dẫn sử dụng', 'book', []]
+  ['sync', 'Đồng bộ nhiều máy', 'cloud', []], ['plan', 'Gói cước & tài khoản', 'tag', []], ['export', 'Xuất báo cáo Excel', 'download', ['viewReports', 'manageStock', 'cashbook', 'manageProducts']], ['settings', 'Cài đặt & sao lưu', 'settings', ['settings']], ['logs', 'Nhật ký hoạt động', 'list', ['settings', 'manageStaff']], ['help', 'Hướng dẫn sử dụng', 'book', []]
 ];
 
 export function viewMore(root, ctx) {

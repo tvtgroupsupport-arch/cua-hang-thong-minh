@@ -126,8 +126,8 @@ test('khuyến mãi theo ngày/giờ/lượt dùng', async () => {
   eq(E.calcCart({ lines: [L(a, 1)] }, { now }).total, 10000);
   eq(E.calcCart({ lines: [L(a, 1)] }, { now: new Date(2025, 5, 14, 10, 0).getTime() }).total, 5000);
   const pr = E.savePromo({ name: 'Giới hạn', type: 'amount', scope: 'product', productIds: [a.id], value: 1000, limit: 1 });
-  sell([L(a, 1)]); eq(S.get('promos', pr.id).used, 1);
-  eq(E.calcCart({ lines: [L(a, 1)] }).promoNames.includes('Giới hạn'), false, 'hết lượt');
+  sell([L(a, 1)], [{ method: 'cash', amount: 9000 }], {}, { ts: now }); eq(S.get('promos', pr.id).used, 1);      // ts cố định (thứ Tư): không phụ thuộc hôm nay có phải cuối tuần không
+  eq(E.calcCart({ lines: [L(a, 1)] }, { now }).promoNames.includes('Giới hạn'), false, 'hết lượt');
 });
 
 test('giảm giá tay, làm tròn, phân bổ giảm giá về từng dòng', async () => {

@@ -1,7 +1,7 @@
 /* Sổ quỹ: thu/chi khác, dòng tiền tổng hợp (tiền mặt & ngân hàng), ca làm việc. */
 import { S } from '../store.js';
 import { fail, rnd, norm } from '../util.js';
-import { need, log, currentUser } from './auth.js';
+import { need, needWrite, log, currentUser } from './auth.js';
 
 /* ---------- Danh mục thu chi ---------- */
 export function saveCashCat(d) {
@@ -19,7 +19,7 @@ export function deleteCashCat(id) {
 
 /* ---------- Thu / chi khác ---------- */
 export function addCashEntry({ kind, catId, amount, fund = 'cash', note = '', ts }) {
-  need('cashbook');
+  need('cashbook'); needWrite();
   amount = rnd(amount);
   if (!(amount > 0)) fail('Số tiền phải lớn hơn 0');
   if (!['income', 'expense'].includes(kind)) fail('Chọn thu hay chi');
@@ -85,7 +85,7 @@ export function currentShift(staffId = S.session.staffId) {
   return S.list('shifts').find(s => s.status === 'open' && s.staffId === staffId) || null;
 }
 export function openShift({ openingCash = 0 } = {}) {
-  need('cashbook');
+  need('cashbook'); needWrite();
   if (currentShift()) fail('Bạn đang có một ca chưa chốt');
   openingCash = rnd(openingCash); if (openingCash < 0) fail('Tiền đầu ca không hợp lệ');
   const u = currentUser();

@@ -1,7 +1,7 @@
 /* Khách hàng, nhà cung cấp và sổ công nợ (phải thu / phải trả). */
 import { S } from '../store.js';
 import { fail, norm, rnd } from '../util.js';
-import { need, log, settings } from './auth.js';
+import { need, needWrite, log, settings } from './auth.js';
 
 export const CUSTOMER_GROUPS = { retail: 'Khách lẻ', wholesale: 'Khách sỉ', vip: 'Thân thiết' };
 
@@ -70,7 +70,7 @@ export function ledgerSum(party, partyId) { return ledgerOf(party, partyId).redu
 
 /** Thu nợ khách: trả bớt hoặc hết. method: cash | transfer */
 export function payCustomerDebt({ customerId, amount, method = 'cash', note = '' }) {
-  need('manageCustomers');
+  need('manageCustomers'); needWrite();
   amount = rnd(amount);
   const c = S.get('customers', customerId); if (!c) fail('Không tìm thấy khách hàng');
   if (!(amount > 0)) fail('Số tiền thu phải lớn hơn 0');
@@ -83,7 +83,7 @@ export function payCustomerDebt({ customerId, amount, method = 'cash', note = ''
   });
 }
 export function paySupplierDebt({ supplierId, amount, method = 'cash', note = '' }) {
-  need('manageSuppliers');
+  need('manageSuppliers'); needWrite();
   amount = rnd(amount);
   const s = S.get('suppliers', supplierId); if (!s) fail('Không tìm thấy nhà cung cấp');
   if (!(amount > 0)) fail('Số tiền trả phải lớn hơn 0');

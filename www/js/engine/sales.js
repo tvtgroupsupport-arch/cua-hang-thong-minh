@@ -1,7 +1,7 @@
 /* Bán hàng: tính giỏ (giá sỉ/bậc, khuyến mãi, giảm giá, làm tròn), lưu hoá đơn, đơn treo, huỷ bill, trả hàng. */
 import { S } from '../store.js';
 import { fail, rnd, roundQty, roundTo, uid, ymd } from '../util.js';
-import { need, can, log, settings, maxDiscountPct, currentUser } from './auth.js';
+import { need, needWrite, can, log, settings, maxDiscountPct, currentUser } from './auth.js';
 import { stockIn, stockOut } from './stockcore.js';
 import { ledgerAdd, addPoints, pointsFor } from './people.js';
 import { activePromos, lineDiscount, orderDiscounts } from './promos.js';
@@ -128,7 +128,7 @@ export const PAY_METHODS = { cash: 'Tiền mặt', vietqr: 'VietQR', transfer: '
 
 /** Lưu hoá đơn. payments: [{method, amount}] (số tiền ĐÃ trừ tiền thừa). opts: {cashGiven, note, holdId, confirmOverLimit} */
 export function createSale(cart, payments, opts = {}) {
-  need('sell');
+  need('sell'); needWrite();
   const st = settings().sale;
   const c = calcCart(cart, { now: opts.ts || Date.now() });
   if (!c.lines.length) fail('Giỏ hàng trống');
@@ -221,7 +221,7 @@ export function voidSale(id, reason) {
 /* ---------- Trả hàng ---------- */
 /** d: {saleId?, items:[{lineIndex, qty}] (khi có hoá đơn) | [{productId, unitId, qty, price}] (không hoá đơn), refund:'cash'|'transfer'|'debt', restock:boolean, reason} */
 export function createReturn(d) {
-  need('returns');
+  need('returns'); needWrite();
   if (!d.items || !d.items.length) fail('Chưa chọn hàng trả');
   const sale = d.saleId ? S.get('sales', d.saleId) : null;
   if (d.saleId && !sale) fail('Không tìm thấy hoá đơn gốc');

@@ -18,6 +18,9 @@ import { viewSettings, viewStaff, viewLogs } from './views/settings.js';
 import { viewExport } from './views/export.js';
 import { viewSync } from './views/sync.js';
 import * as Sync from './sync/engine.js';
+import * as License from './license.js';
+import * as Central from './cloud/central.js';
+import { viewPlan } from './views/plan.js';
 
 const SESSION_KEY = 'taphoa.staff';
 /* path, tiêu đề, quyền cần có (một trong), mục nav */
@@ -37,6 +40,7 @@ const ROUTES = {
   logs: { title: 'Nhật ký hoạt động', perm: ['settings', 'manageStaff'], nav: 'more', view: viewLogs },
   export: { title: 'Xuất báo cáo', perm: ['viewReports', 'manageStock', 'cashbook', 'manageProducts'], nav: 'reports', view: viewExport },
   sync: { title: 'Đồng bộ nhiều máy', perm: [], nav: 'more', view: viewSync },
+  plan: { title: 'Gói cước & tài khoản', perm: [], nav: 'more', view: viewPlan },
   help: { title: 'Hướng dẫn', perm: [], nav: 'more', view: viewHelp }
 };
 const NAV = [['pos', 'Bán hàng', 'cart'], ['products', 'Hàng hóa', 'box'], ['stock', 'Kho', 'warehouse'], ['reports', 'Báo cáo', 'chart'], ['more', 'Thêm', 'menu']];
@@ -52,13 +56,14 @@ function buildShell() {
   const nav = h('nav', { class: 'bottomnav' });
   const syncBtn = h('button', { class: 'iconbtn sync-btn hide', title: 'Đồng bộ nhiều máy', 'aria-label': 'Đồng bộ', onClick: () => go('sync') });
 
+  const banner = h('a', { class: 'banner hide', href: '#/plan', style: { display: 'none', margin: '6px 12px 0', textDecoration: 'none', color: 'inherit' } });
   const root = h('div', { class: 'shell' }, nav,
     h('div', { class: 'content' },
       h('header', { class: 'topbar' }, title, actions, syncBtn,
         h('button', { class: 'iconbtn', title: 'Khoá / đổi người dùng', 'aria-label': 'Khoá', onClick: lock }, icon('lock'))),
-      main));
+      banner, main));
   mount(app, root);
-  shell = { root, title, actions, main, nav, syncBtn };
+  shell = { root, title, actions, main, nav, syncBtn, banner };
   updateSyncBtn();
   renderNav();
 
@@ -97,6 +102,7 @@ function route() {
   if (!r) { location.hash = '#/' + (['pos', 'products', 'stock', 'reports', 'more'].find(k => allowed(ROUTES[k])) || 'more'); return; }
   if (!allowed(r)) { toast('Bạn không có quyền vào mục này', 'error'); location.hash = '#/more'; return; }
   if (!shell || !shell.root.isConnected) buildShell();
+  License.ensureTrialStart(); updateBanner();
   renderNav(r.nav);
   shell.title.textContent = r.title;
   mount(shell.actions);
@@ -136,7 +142,20 @@ function handleBack() {
   return false;
 }
 
-let lastPersistWarn = 0;
+let lastPersistWarn = 0, lastLic = 0;
+/** Hỏi lại gói cước ở máy chủ cửa hàng (tối đa 30 phút/lần, mất mạng thì thôi) rồi cập nhật dải thông báo. */
+async function refreshLicense() {
+  if (!License.enabled() || Date.now() - lastLic < 30 * 60000) return;
+  lastLic = Date.now(); await License.refresh(); updateBanner();
+}
+function updateBanner() {
+  if (!shell || !shell.banner) return;
+  const s = License.status(), b = shell.banner;
+  const show = s.enabled && (s.locked || s.state === 'expiring');
+  b.style.display = show ? 'block' : 'none'; b.classList.toggle('hide', !show);
+  b.className = 'banner ' + (s.locked ? 'red' : 'amber') + (show ? '' : ' hide');
+  b.textContent = s.locked ? 'Gói cước đã hết hạn — các thao tác ghi bị khoá. Bấm để gia hạn →' : `${License.describe()} — bấm để gia hạn →`;
+}
 async function boot() {
   applyTheme();
   await loadNativeBridge();
@@ -153,6 +172,8 @@ async function boot() {
   onBack(handleBack);
   Sync.onStatus(updateSyncBtn); Sync.onDataChanged(debounce(refreshView, 400));
   if (Sync.isEnabled()) Sync.start();
+  License.init(); refreshLicense();
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') refreshLicense(); });
   installSwipe(); installAutoCenter();
   window.__app = { S, E, go };
   const native = isNative();

@@ -9,6 +9,7 @@
 import { S } from '../store.js';
 import { sqlScript, connectOwner, draftKey, transport } from './engine.js';
 import { nb } from '../native.js';
+import * as Central from '../cloud/central.js';
 
 export const STEPS = ['Kiểm tra tài khoản Supabase', 'Tạo dự án dữ liệu', 'Chờ dự án khởi động (1–2 phút)', 'Lấy khoá kết nối', 'Cài hàm đồng bộ', 'Kiểm tra kết nối', 'Liên kết & đồng bộ lần đầu'];
 const API = 'https://api.supabase.com';
@@ -143,4 +144,43 @@ export async function autoConnect({ token, orgSlug, onProgress = () => {}, deps 
   if (res && res.error) throw new ProvisionError('Đã tạo dự án nhưng liên kết thất bại: ' + res.error + ' Bấm "Thử lại" để liên kết lại (không tạo dự án mới).', 'connect');
   clearProv();
   return Object.assign({ sync: res }, r);
+}
+
+/* =====================================================================================================
+   CÁCH 2 — tự tạo qua OAuth + Edge Function trên Supabase TRUNG TÂM (đúng phương pháp của app BEPO).
+   Chủ cửa hàng chỉ cần bấm "Authorize" MỘT lần trên trang Supabase; token uỷ quyền chỉ nằm trên máy chủ trung tâm và bị xoá khi xong (app không bao giờ cầm token).
+   Luồng: provision-start (gửi kèm script SQL) → mở authorize_url → vòng lặp gọi provision-step tới khi 'done' → connectOwner.
+   ===================================================================================================== */
+export const oauthAvailable = () => Central.configured() && Central.isSignedIn();
+
+export async function oauthProvision({ onProgress = () => {}, openUrl, deps = {} } = {}) {
+  const call = deps.callFn || Central.callFn, sleep = deps.sleep || sleepReal, wait = deps.waitMs == null ? 3000 : deps.waitMs, work = deps.workMs == null ? 5000 : deps.workMs;
+  const maxMs = deps.maxMs || 15 * 60 * 1000;
+  if (!deps.callFn && !Central.isSignedIn()) throw new ProvisionError('Đăng nhập tài khoản lưu trữ (Thêm → Gói cước & tài khoản) trước', 'noauth');
+  onProgress(1, 8, 'Chuẩn bị');
+  const s = await call('provision-start', { sql: sqlScript() });
+  if (s.authorize_url) {
+    onProgress(1, 8, 'Chờ bạn bấm "Authorize" trên trang Supabase');
+    if (openUrl) await openUrl(s.authorize_url);
+  }
+  const deadline = Date.now() + maxMs;
+  while (Date.now() < deadline) {
+    const r = await call('provision-step', {});
+    if (r.state === 'error') throw new ProvisionError(r.message || 'Có lỗi xảy ra', 'oauth');
+    if (r.state === 'done') {
+      onProgress(8, 8, 'Liên kết & đồng bộ lần đầu');
+      for (let attempt = 0; ; attempt++) {          // tên miền của dự án vừa tạo có thể chưa kịp lan ra mạng
+        try { const res = await connectOwner({ url: r.url, anon: r.anon_key }); return Object.assign({ url: r.url, anon: r.anon_key, sync: res }); }
+        catch (err) {
+          const net = /Không kết nối được|Failed to fetch|NetworkError|Load failed/i.test(String(err && err.message || err));
+          if (!net || attempt >= 8) throw err;
+          onProgress(8, 8, 'Kho dữ liệu vừa tạo đang được công bố trên mạng, thử nối lại');
+          await sleep(work);
+        }
+      }
+    }
+    onProgress(r.step || 1, r.total || 8, r.message || '');
+    await sleep(r.state === 'awaiting_auth' ? wait : work);
+  }
+  throw new ProvisionError('Quá thời gian chờ. Bấm "Tiếp tục" để kiểm tra lại (không tạo dự án mới).', 'timeout');
 }

@@ -13,8 +13,8 @@ export const DB_VERSION = 1;
    Meta được đồng bộ: cài đặt cửa hàng, số dư quỹ ban đầu. Meta chỉ của máy này (không sao lưu, không đồng bộ): cấu hình kết nối, hàng đợi, bản nháp. */
 export const SYNC_COLLS = COLLS.filter(c => c !== 'logs' && c !== 'holds');
 const SYNC_SET = new Set(SYNC_COLLS);
-export const SYNC_META = ['settings', 'openingBalance'];
-export const LOCAL_META = ['sync', 'syncq', 'syncDraft', 'lastBackup'];
+export const SYNC_META = ['settings', 'openingBalance', 'license'];
+export const LOCAL_META = ['sync', 'syncq', 'syncDraft', 'lastBackup', 'central', 'clockHw', 'trialStart'];
 
 /* ---------- Adapter lưu trữ ---------- */
 export function memoryAdapter() {

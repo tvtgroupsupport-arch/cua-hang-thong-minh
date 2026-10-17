@@ -1,7 +1,7 @@
 /* Kho: nhập hàng, trả hàng NCC, xuất hủy, kiểm kho, cảnh báo, gợi ý đặt hàng, thẻ kho. */
 import { S } from '../store.js';
 import { fail, rnd, roundQty, ymd, DAY, dayStart, uid } from '../util.js';
-import { need, log, settings } from './auth.js';
+import { need, needWrite, log, settings } from './auth.js';
 import { stockIn, stockOut, adjustTo } from './stockcore.js';
 import { ledgerAdd } from './people.js';
 import { unitOf } from './products.js';
@@ -12,7 +12,7 @@ export const nextCode = (prefix, ts = Date.now()) => `${prefix}${ymd(ts).replace
 
 /* ---------- Nhập hàng ---------- */
 export function createPurchase(d) {
-  need('manageStock');
+  need('manageStock'); needWrite();
   if (!d.items || !d.items.length) fail('Phiếu nhập chưa có hàng');
   const supplier = d.supplierId ? S.get('suppliers', d.supplierId) : null;
   if (d.supplierId && !supplier) fail('Nhà cung cấp không tồn tại');
@@ -92,7 +92,7 @@ export function createPurchaseReturn(d) {
 /* ---------- Xuất hủy ---------- */
 export const WRITEOFF_REASONS = { expired: 'Hết hạn', damaged: 'Hỏng / vỡ', lost: 'Thất thoát / mất', internal: 'Dùng nội bộ', other: 'Lý do khác' };
 export function createWriteOff(d) {
-  need('manageStock');
+  need('manageStock'); needWrite();
   if (!d.items || !d.items.length) fail('Chưa chọn hàng cần xuất hủy');
   const reason = WRITEOFF_REASONS[d.reason] ? d.reason : 'other';
   return S.tx(() => {

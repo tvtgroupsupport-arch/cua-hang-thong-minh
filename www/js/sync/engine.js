@@ -10,6 +10,10 @@ import { roundQty } from '../util.js';
 import { httpTransport, SyncError, normalizeUrl } from './transport.js';
 import { storeSql } from './sql.js';
 import { log } from '../engine/auth.js';
+import * as Central from '../cloud/central.js';
+
+/** Đã đăng nhập tài khoản lưu trữ: ghi địa chỉ kho lên trung tâm (nhà cung cấp biết đã liên kết, workflow giữ-không-ngủ đánh thức được). Lỗi thì bỏ qua. */
+function saveLinkToCentral(url, anon) { try { if (Central.configured() && Central.isSignedIn()) Central.rpc('save_store_link', { p_url: url, p_anon: anon }).catch(() => {}); } catch (e) { /* không ảnh hưởng đồng bộ */ } }
 
 /** Trường suy ra, không đồng bộ — mỗi máy tự tính lại. */
 export const DERIVED = { products: ['stock'], batches: ['qty'], customers: ['debt', 'points', 'totalSpent', 'lastBuyAt'], suppliers: ['debt'], promos: ['used'] };
@@ -67,6 +71,7 @@ export async function connectOwner({ url, anon }) {
   saveConfig({ enabled: true, url, anon, key, role: 'owner', name: 'Máy chủ cửa hàng', tag: 'A', lastSeq: 0, lastSyncAt: 0, error: '' });
   S.setSyncOn(true); S.queueAll();
   log('sync', 'Bật đồng bộ Supabase (máy chủ cửa hàng)');
+  saveLinkToCentral(url, anon);
   return syncNow();
 }
 

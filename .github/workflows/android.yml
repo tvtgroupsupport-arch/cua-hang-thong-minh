@@ -18,6 +18,13 @@ jobs:
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: 21 }
       - run: npm install
+      - name: Ghi cấu hình gói cước (nếu có Secrets)
+        env:
+          CENTRAL_SUPABASE_URL: ${{ secrets.CENTRAL_SUPABASE_URL }}
+          CENTRAL_SUPABASE_ANON_KEY: ${{ secrets.CENTRAL_SUPABASE_ANON_KEY }}
+          SUPPORT_TEXT: ${{ secrets.SUPPORT_TEXT }}
+          PLAN_PRICES: ${{ secrets.PLAN_PRICES }}
+        run: node scripts/write-app-config.mjs
       - name: Đóng gói cầu nối native (esbuild → www/native-bridge.js)
         run: npm run build
       - name: Thêm nền tảng Android

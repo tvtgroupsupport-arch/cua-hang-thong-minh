@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Quản trị gói cước — Tạp Hóa - Quản lý cửa hàng</title>
+<style>
+  :root { --accent:#15803d; --ink:#1A1613; --muted:#6b645d; --line:#e6e0d8; --bg:#FBF8F3; --green:#3F7D5C; --red:#AB3D31; --amber:#93701A; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; background:var(--bg); color:var(--ink); }
+  header { background:var(--accent); color:#fff; padding:14px 20px; display:flex; align-items:center; gap:12px; }
+  header h1 { font-size:17px; margin:0; flex:1; }
+  main { max-width:1000px; margin:0 auto; padding:20px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:16px; }
+  h2 { font-size:15px; margin:0 0 12px; }
+  label { display:block; font-size:12.5px; color:var(--muted); margin:10px 0 4px; }
+  input { width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:8px; font:inherit; }
+  button { font:inherit; border:1px solid var(--line); background:#fff; border-radius:8px; padding:8px 14px; cursor:pointer; }
+  button.pri { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
+  button.ok { background:var(--green); border-color:var(--green); color:#fff; }
+  button.bad { color:var(--red); }
+  button:disabled { opacity:.5; cursor:default; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th, td { text-align:left; padding:9px 8px; border-bottom:1px solid var(--line); vertical-align:middle; }
+  th { font-size:12px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.03em; }
+  .badge { display:inline-block; padding:2px 9px; border-radius:999px; font-size:12px; font-weight:600; }
+  .b-active { background:#E7F1EA; color:var(--green); } .b-trial { background:#E6EBF4; color:#4A5F8A; }
+  .b-expired { background:#F6E8E5; color:var(--red); } .b-warn { background:#F5EEDA; color:var(--amber); }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .muted { color:var(--muted); font-size:13px; }
+  .scroll { overflow-x:auto; }
+  #toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#222; color:#fff; padding:10px 18px; border-radius:8px; display:none; z-index:9; }
+</style>
+</head>
+<body>
+<header><h1>Quản trị gói cước</h1><button id="btnOut" style="display:none">Đăng xuất</button></header>
+<main>
+  <div id="view"></div>
+</main>
+<div id="toast"></div>
+
+<script type="module">
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fmtDate = ms => ms ? new Date(ms).toLocaleDateString('vi-VN') : '—';
+const fmtDateTime = ms => ms ? new Date(ms).toLocaleString('vi-VN') : '—';
+const CFG_KEY = 'taphoa_admin_cfg';
+let sb = null, state = { overview: [], requests: [] };
+
+function toast(msg) {
+  const t = $('toast'); t.textContent = msg; t.style.display = 'block';
+  clearTimeout(toast._t); toast._t = setTimeout(() => { t.style.display = 'none'; }, 2600);
+}
+function friendly(e) {
+  const m = (e && e.message) || String(e);
+  if (/Invalid login/i.test(m)) return 'Sai email hoặc mật khẩu';
+  if (/Email not confirmed/i.test(m)) return 'Email chưa xác nhận';
+  if (/Không có quyền/.test(m)) return 'Tài khoản này không có quyền admin';
+  if (/already registered|User already exists/i.test(m)) return 'Email này đã có tài khoản rồi — bấm "Đã có tài khoản? Đăng nhập" bên dưới';
+  if (/Password should be at least/i.test(m)) return 'Mật khẩu cần tối thiểu 6 ký tự';
+  return m;
+}
+function loadCfg() { try { return JSON.parse(localStorage.getItem(CFG_KEY)) || {}; } catch (e) { return {}; } }
+
+/* ---------- Màn đăng nhập / tạo tài khoản ---------- */
+function renderLogin(msg, mode) {
+  mode = mode || 'login';   // 'login' | 'signup'
+  const c = loadCfg();
+  $('btnOut').style.display = 'none';
+  const signup = mode === 'signup';
+  $('view').innerHTML = `<div class="card" style="max-width:460px;margin:30px auto">
+    <h2>${signup ? 'Tạo tài khoản admin' : 'Đăng nhập quản trị'}</h2>
+    ${msg ? `<div class="muted" style="color:${/thành công|Đã gửi/.test(msg) ? 'var(--green)' : 'var(--red)'};margin-bottom:8px">${esc(msg)}</div>` : ''}
+    <label>Project URL của Supabase TRUNG TÂM</label><input id="cfgUrl" value="${esc(c.url || '')}" placeholder="https://xxxx.supabase.co">
+    <label>Khoá anon / publishable (không phải service_role)</label><input id="cfgKey" value="${esc(c.key || '')}" autocomplete="off">
+    <label>Email admin</label><input id="email" type="email" value="${esc(c.email || '')}" autocomplete="username">
+    <label>Mật khẩu${signup ? ' (tối thiểu 6 ký tự)' : ''}</label><input id="pass" type="password" autocomplete="${signup ? 'new-password' : 'current-password'}">
+    <div style="margin-top:16px" class="row">
+      <button class="pri" id="btnGo">${signup ? 'Tạo tài khoản' : 'Đăng nhập'}</button>
+      <button id="btnSwitch" type="button">${signup ? '‹ Đã có tài khoản? Đăng nhập' : 'Chưa có tài khoản? Tạo mới'}</button>
+    </div>
+    ${signup ? `<p class="muted">Tạo xong, nhớ tự chạy đúng 1 lần trong SQL Editor của Supabase trung tâm (thay đúng email):<br>
+        <code>insert into public.admins (user_id) select id from auth.users where email = '${esc($('email')?.value || 'email-cua-ban@example.com')}';</code><br>
+        Chưa chạy dòng này thì tạo tài khoản xong vẫn đăng nhập được nhưng không vào được trang quản trị.</p>`
+      : `<p class="muted">Tài khoản phải được thêm vào bảng <code>admins</code> (xem hướng dẫn trong supabase/central-setup.sql).</p>`}
+  </div>`;
+  $('btnGo').onclick = signup ? signup_ : login;
+  $('btnSwitch').onclick = () => renderLogin('', signup ? 'login' : 'signup');
+  $('pass').onkeydown = e => { if (e.key === 'Enter') (signup ? signup_ : login)(); };
+}
+function readForm() {
+  return { url: $('cfgUrl').value.trim().replace(/\/+$/, ''), key: $('cfgKey').value.trim(), email: $('email').value.trim(), pass: $('pass').value };
+}
+async function login() {
+  const { url, key, email, pass } = readForm();
+  if (!/^https:\/\//.test(url) || key.length < 20) return renderLogin('Nhập đủ Project URL (https://…) và khoá anon');
+  if (!email || !pass) return renderLogin('Nhập email và mật khẩu');
+  try {
+    sb = createClient(url, key, { auth: { persistSession: false } });
+    const { error } = await sb.auth.signInWithPassword({ email, password: pass });
+    if (error) throw error;
+    const st = await sb.rpc('admin_status');
+    if (st.error) throw st.error;
+    if (!st.data) { await sb.auth.signOut(); return renderLogin('Tài khoản này chưa được cấp quyền admin — xem hướng dẫn chạy SQL bên dưới nút "Chưa có tài khoản?"', 'login'); }
+    localStorage.setItem(CFG_KEY, JSON.stringify({ url, key, email }));
+    await refresh();
+  } catch (e) { renderLogin(friendly(e)); }
+}
+/** Tạo tài khoản MỚI trên Supabase trung tâm — chỉ tạo đăng nhập, CHƯA có quyền admin (cần tự chạy
+    SQL thêm vào bảng admins, xem hướng dẫn hiện kèm theo form). Đặt tên khác login() để không trùng
+    với biến top-level "signup" dùng trong renderLogin(). */
+async function signup_() {
+  const { url, key, email, pass } = readForm();
+  if (!/^https:\/\//.test(url) || key.length < 20) return renderLogin('Nhập đủ Project URL (https://…) và khoá anon', 'signup');
+  if (!email || !pass) return renderLogin('Nhập email và mật khẩu', 'signup');
+  if (pass.length < 6) return renderLogin('Mật khẩu cần tối thiểu 6 ký tự', 'signup');
+  try {
+    sb = createClient(url, key, { auth: { persistSession: false } });
+    const { data, error } = await sb.auth.signUp({ email, password: pass });
+    if (error) throw error;
+    localStorage.setItem(CFG_KEY, JSON.stringify({ url, key, email }));
+    // Cố tình GIỮ NGUYÊN mode 'signup' — khối SQL mẫu bên dưới form chỉ hiện ở mode này, cần người
+    // dùng còn thấy nó để copy. Họ tự bấm "Đã có tài khoản? Đăng nhập" sau khi chạy xong SQL.
+    if (!data.session) return renderLogin('Đã gửi email xác nhận — mở email bấm xác nhận, CHẠY ĐOẠN SQL BÊN DƯỚI, rồi bấm "Đã có tài khoản? Đăng nhập".', 'signup');
+    return renderLogin('Tạo tài khoản thành công — chạy đoạn SQL bên dưới, rồi bấm "Đã có tài khoản? Đăng nhập".', 'signup');
+  } catch (e) { renderLogin(friendly(e), 'signup'); }
+}
+
+/* ---------- Bảng điều khiển ---------- */
+async function refresh() {
+  const [ov, rq] = await Promise.all([sb.rpc('admin_overview'), sb.rpc('admin_pending_requests')]);
+  if (ov.error) throw ov.error; if (rq.error) throw rq.error;
+  state = { overview: ov.data || [], requests: rq.data || [] };
+  renderDash();
+}
+function statusBadge(o) {
+  const left = o.expires_at ? Date.parse(o.expires_at) - Date.now() : 0;
+  if (o.status === 'expired' || left <= 0) return '<span class="badge b-expired">Hết hạn</span>';
+  if (left < 7 * 864e5) return '<span class="badge b-warn">Sắp hết</span>';
+  return o.status === 'trial' ? '<span class="badge b-trial">Dùng thử</span>' : '<span class="badge b-active">Đang dùng</span>';
+}
+function renderDash() {
+  $('btnOut').style.display = '';
+  const { overview, requests } = state;
+  const active = overview.filter(o => o.status !== 'expired').length;
+  $('view').innerHTML = `
+    <div class="card"><div class="row"><div style="flex:1"><b>${overview.length}</b> chủ cửa hàng · <b>${active}</b> còn hạn · <b>${requests.length}</b> yêu cầu chờ duyệt</div>
+      <button id="btnRefresh">Làm mới</button></div></div>
+
+    <div class="card"><h2>Yêu cầu gia hạn chờ duyệt</h2>
+      ${requests.length ? `<div class="scroll"><table><tr><th>Cửa hàng</th><th>Email</th><th>Gói</th><th>Ghi chú</th><th>Gửi lúc</th><th></th></tr>
+        ${requests.map(r => `<tr><td>${esc(r.shop_name || '—')}</td><td>${esc(r.email)}</td><td><b>${esc(r.plan_months)} tháng</b></td>
+          <td>${esc(r.note || '')}</td><td>${esc(fmtDateTime(Date.parse(r.created_at)))}</td>
+          <td class="row"><button class="ok" data-act="approve" data-id="${esc(r.id)}" data-nm="${esc(r.email)}" data-m="${esc(r.plan_months)}">Duyệt</button>
+              <button class="bad" data-act="reject" data-id="${esc(r.id)}">Từ chối</button></td></tr>`).join('')}</table></div>`
+        : '<div class="muted">Không có yêu cầu nào.</div>'}
+      <p class="muted">Chỉ bấm <b>Duyệt</b> sau khi đã nhận được tiền gói cước. Duyệt sẽ cộng thêm số tháng vào hạn hiện tại (gia hạn sớm không mất phần còn lại).</p></div>
+
+    <div class="card"><h2>Danh sách chủ cửa hàng</h2>
+      <div class="scroll"><table><tr><th>Cửa hàng</th><th>Email</th><th>Trạng thái</th><th>Hết hạn</th><th>Đã nối Supabase</th><th>Cộng tháng</th></tr>
+      ${overview.map(o => `<tr><td>${esc(o.shop_name || '—')}</td><td>${esc(o.email)}</td><td>${statusBadge(o)}${o.plan_months ? ` <span class="muted">${esc(o.plan_months)}th</span>` : ''}</td>
+        <td>${esc(fmtDate(o.expires_at ? Date.parse(o.expires_at) : 0))}</td><td>${o.linked ? '✓' : '—'}</td>
+        <td class="row">${[1, 6, 12].map(m => `<button data-act="extend" data-id="${esc(o.owner_id)}" data-nm="${esc(o.email)}" data-m="${m}">+${m}</button>`).join('')}</td></tr>`).join('') || '<tr><td colspan="6" class="muted">Chưa có chủ cửa hàng nào đăng ký.</td></tr>'}
+      </table></div></div>`;
+  $('btnRefresh').onclick = () => run(refresh);
+}
+
+async function run(fn) {
+  try { await fn(); } catch (e) { toast(friendly(e)); }
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('button[data-act]'); if (!b) return;
+  const { act, id, nm, m } = b.dataset;
+  run(async () => {
+    if (act === 'approve') {
+      if (!confirm(`Duyệt gia hạn ${m} tháng cho ${nm}?`)) return;
+      const { error } = await sb.rpc('admin_approve_renewal', { p_id: Number(id) }); if (error) throw error;
+      toast('Đã duyệt'); await refresh();
+    } else if (act === 'reject') {
+      if (!confirm('Từ chối yêu cầu này?')) return;
+      const { error } = await sb.rpc('admin_reject_renewal', { p_id: Number(id) }); if (error) throw error;
+      toast('Đã từ chối'); await refresh();
+    } else if (act === 'extend') {
+      if (!confirm(`Cộng thêm ${m} tháng cho ${nm}?`)) return;
+      const { error } = await sb.rpc('admin_extend', { p_owner: id, p_months: Number(m) }); if (error) throw error;
+      toast(`Đã cộng ${m} tháng`); await refresh();
+    }
+  });
+});
+$('btnOut').onclick = async () => { try { await sb.auth.signOut(); } catch (e) {} sb = null; renderLogin(); };
+renderLogin();
+</script>
+</body>
+</html>

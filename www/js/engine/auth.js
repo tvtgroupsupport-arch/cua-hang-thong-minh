@@ -87,6 +87,11 @@ export function maxDiscountPct() {
 }
 export function need(perm) { if (!can(perm)) fail('Bạn không có quyền thực hiện thao tác này', 'perm'); }
 
+/** Khoá mềm gói cước: license.js đăng ký hàm trả về lý do chặn (chuỗi) hoặc '' nếu được ghi. Chỉ chặn các thao tác phát sinh nghiệp vụ mới; xem/xuất báo cáo vẫn dùng được. */
+let writeGuard = null;
+export const setWriteGuard = f => { writeGuard = f || null; };
+export function needWrite() { const m = writeGuard && writeGuard(); if (m) fail(m, 'locked'); }
+
 /* ---------- Mật khẩu / PIN ---------- */
 const enc = new TextEncoder();
 const b64 = buf => btoa(String.fromCharCode(...new Uint8Array(buf)));
