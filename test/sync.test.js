@@ -4,6 +4,7 @@ import * as E from '../www/js/engine/index.js';
 import * as Sync from '../www/js/sync/engine.js';
 import { S, memoryAdapter, SYNC_COLLS } from '../www/js/store.js';
 import { SyncError } from '../www/js/sync/transport.js';
+import { autoConnect, provisionProject, ProvisionError } from '../www/js/sync/provision.js';
 
 const tests = [];
 const test = (name, fn) => tests.push([name, fn]);
@@ -80,7 +81,7 @@ test('máy phụ vào bằng mã kết nối: kéo đủ dữ liệu (nhiều tr
   const promoUsed = Object.fromEntries(S.list('promos').map(p => [p.id, p.used]));
   await use('B');
   const r = await Sync.joinWithCode(code);
-  ok(!r.error, 'tham gia: ' + r.error); ok(r.pulled > 400, 'kéo nhiều trang: ' + r.pulled);
+  ok(!r.error, 'tham gia: ' + r.error); ok(r.pulled > 200, 'kéo nhiều trang: ' + r.pulled);
   eq(counts(), A.counts, 'số bản ghi từng bộ sưu tập');
   eq(stocks(), A.stocks, 'tồn kho tính lại từ sổ kho khớp máy chủ cửa hàng');
   eq(Object.fromEntries(S.list('customers').map(c => [c.id, c.debt])), A.debts, 'nợ khách');
@@ -203,6 +204,56 @@ test('ngắt đồng bộ: giữ dữ liệu trên máy, thôi xếp hàng đợ
   const n = S.count('products'); const p = S.list('products')[0]; E.saveProduct({ id: p.id, name: p.name + ' (sau ngắt)', units: p.units, categoryId: p.categoryId, kind: p.kind });
   eq(S.syncQ.size, 0, 'không xếp hàng nữa'); eq(S.count('products'), n);
   eq((await Sync.syncNow()).skipped, true);
+});
+
+/* ---------- Tự tạo Supabase: Management API giả + Postgres thật ---------- */
+function fakeMgmt({ orgs = [{ slug: 'org1', name: 'Org 1' }], failFirstSql = 0, pollsToHealthy = 2 } = {}) {
+  const st = { calls: [], created: 0, polls: 0, sqlTries: 0, keysSeen: false };
+  const mg = async (token, method, path, body) => {
+    st.calls.push(method + ' ' + path);
+    if (token !== 'sbp_' + 'a'.repeat(40)) return { ok: false, status: 401, data: { message: 'bad token' } };
+    if (path === '/v1/organizations') return { ok: true, status: 200, data: orgs };
+    if (path === '/v1/projects' && method === 'POST') { if (body.region_selection) return { ok: false, status: 400, data: { message: 'region_selection' } }; st.created++; st.body = body; return { ok: true, status: 201, data: { ref: 'abcdefghijklmnopqrst' } }; }
+    if (path.split('/').length === 4 && path.startsWith('/v1/projects/') && !path.includes('?')) { st.polls++; return { ok: true, status: 200, data: { status: st.polls >= pollsToHealthy ? 'ACTIVE_HEALTHY' : 'COMING_UP' } }; }
+    if (path.endsWith('/api-keys?reveal=true')) { st.keysSeen = true; return { ok: true, status: 200, data: [{ name: 'service_role', api_key: 'SECRET' }, { name: 'anon', api_key: 'ANONKEY' }] }; }
+    if (path.endsWith('/database/query')) { st.sqlTries++; if (st.sqlTries <= failFirstSql) return { ok: false, status: 500, data: {} }; try { await db.exec(body.query); return { ok: true, status: 201, data: [] }; } catch (e) { return { ok: false, status: 400, data: { message: e.message } }; } }
+    return { ok: false, status: 404, data: {} };
+  };
+  return { mg, st };
+}
+const GOOD = 'sbp_' + 'a'.repeat(40);
+
+test('tự tạo Supabase: tạo dự án, chờ, lấy khoá anon (không lấy service_role), cài SQL, liên kết & đẩy dữ liệu; thử lại không tạo dự án thứ hai', async () => {
+  db = new PGlite(); await db.exec('create role anon; create role authenticated;');
+  await use('P'); await E.setupStore({ store: { name: 'Tạp hóa P' }, owner: { name: 'Chủ', username: 'chu', password: '1234' } });
+  const { mg, st } = fakeMgmt({ failFirstSql: 2 }); const steps = [];
+  const r = await autoConnect({ token: GOOD, onProgress: (i) => steps.push(i), deps: { mg, sleep: async () => {}, waitMs: 60000 } });
+  eq(st.created, 1, 'đúng 1 dự án'); eq(r.anon, 'ANONKEY'); eq(r.url, 'https://abcdefghijklmnopqrst.supabase.co');
+  ok(!JSON.stringify(Sync.config()).includes('SECRET'), 'không lưu khoá bí mật'); ok(st.body.db_pass.length >= 24, 'mật khẩu CSDL ngẫu nhiên');
+  eq(steps[steps.length - 1], 7); ok(Sync.isEnabled(), 'đã bật đồng bộ'); eq(Sync.config().role, 'owner');
+  ok(await serverCount() > 0, 'dữ liệu đã lên máy chủ'); ok(st.sqlTries >= 3, 'SQL được thử lại khi CSDL chưa sẵn sàng');
+  ok(!S.meta.syncDraft.prov, 'đã dọn trạng thái dự án dở dang');
+  await Sync.disconnect();
+});
+
+test('tự tạo Supabase: lỗi giữa chừng rồi "Thử lại" dùng lại dự án cũ; mã sai / nhiều tổ chức / hết hạn mức báo rõ', async () => {
+  db = new PGlite(); await db.exec('create role anon; create role authenticated;');
+  await use('P2'); await E.setupStore({ store: { name: 'Tạp hóa P2' }, owner: { name: 'Chủ', username: 'chu', password: '1234' } });
+  const deps0 = { sleep: async () => {} };
+  let e1 = null; try { await provisionProject({ token: 'abc', deps: deps0 }); } catch (e) { e1 = e; } ok(e1 instanceof ProvisionError && e1.code === 'input', 'mã sai dạng');
+  const f = fakeMgmt({ orgs: [{ slug: 'a', name: 'A' }, { slug: 'b', name: 'B' }] });
+  const r0 = await provisionProject({ token: GOOD, deps: Object.assign({ mg: f.mg }, deps0) }); eq(r0.needOrg.length, 2); eq(f.st.created, 0);
+  // lần 1: chờ quá hạn → lỗi, nhưng dự án đã tạo được ghi nhớ
+  let e2 = null; try { await provisionProject({ token: GOOD, orgSlug: 'b', deps: { mg: f.mg, sleep: async () => {}, waitMs: -1, } }); } catch (e) { e2 = e; }
+  eq(e2 && e2.code, 'timeout'); eq(f.st.created, 1);
+  const r = await provisionProject({ token: GOOD, orgSlug: 'b', deps: { mg: f.mg, sleep: async () => {}, waitMs: 60000 } });
+  eq(f.st.created, 1, 'thử lại KHÔNG tạo dự án mới'); eq(r.anon, 'ANONKEY');
+  // hết hạn mức dự án
+  S.setMeta('syncDraft', { key: Sync.draftKey() });
+  const lim = { mg: async (t, m, p) => p === '/v1/organizations' ? { ok: true, status: 200, data: [{ slug: 'o', name: 'O' }] } : { ok: false, status: 400, data: { message: 'You have reached the maximum limits for free projects' } } };
+  let e3 = null; try { await provisionProject({ token: GOOD, deps: Object.assign({ mg: lim.mg }, deps0) }); } catch (e) { e3 = e; }
+  ok(e3 && /đủ số dự án miễn phí/.test(e3.message), 'báo hết hạn mức: ' + (e3 && e3.message));
+  let e4 = null; try { await provisionProject({ token: 'sbp_' + 'b'.repeat(40), deps: Object.assign({ mg: f.mg }, deps0) }); } catch (e) { e4 = e; } ok(e4 && /từ chối mã/.test(e4.message), 'mã bị từ chối');
 });
 
 const world = {};

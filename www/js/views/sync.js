@@ -6,6 +6,7 @@ import { h, icon, mount, modal, toast, guard, confirmBox, field, select, badge, 
 import { fmtDateTime } from '../util.js';
 import { copyText, openUrl, shareText, openScanner, canScan, isNative } from '../native.js';
 import { QR } from '../lib/qr.js';
+import { autoConnect } from '../sync/provision.js';
 
 const hostOf = u => { try { return new URL(u).host; } catch (e) { return u || ''; } };
 const ago = ts => { if (!ts) return 'chưa lần nào'; const s = Math.round((Date.now() - ts) / 1000); return s < 60 ? 'vừa xong' : s < 3600 ? Math.round(s / 60) + ' phút trước' : s < 86400 ? Math.round(s / 3600) + ' giờ trước' : fmtDateTime(ts); };
@@ -27,6 +28,32 @@ export function joinDialog(onDone) {
       Sync.start(); toast(`Đã kết nối: tải ${r.pulled} bản ghi`, 'ok'); onDone && onDone();
     } }] });
   void m;
+}
+
+/** Tự tạo dự án Supabase + liên kết (xem sync/provision.js). onDone() gọi khi liên kết xong. */
+function autoDialog(onDone) {
+  const token = h('input', { class: 'input', type: 'password', autocomplete: 'off', autocapitalize: 'none', placeholder: 'sbp_…' });
+  const orgSel = h('div'), bar = h('div', { style: { height: '8px', width: '0%', background: 'var(--accent, #7c5cff)', borderRadius: '6px', transition: 'width .3s' } });
+  const msg = h('div', { class: 'small mt8' }), prog = h('div', { class: 'hide mt8' }, h('div', { style: { height: '8px', background: 'rgba(128,128,128,.2)', borderRadius: '6px', overflow: 'hidden' } }, bar), msg);
+  let busy = false, orgSlug = '';
+  const go = async () => {
+    if (busy) return; busy = true; btn.disabled = true; prog.classList.remove('hide'); msg.className = 'small mt8'; msg.textContent = '';
+    try {
+      const r = await autoConnect({ token: token.value, orgSlug, onProgress: (i, n, t) => { bar.style.width = Math.round(i / n * 100) + '%'; msg.textContent = `Bước ${i}/${n}: ${t}…`; } });
+      if (r.needOrg) { mount(orgSel, field('Chọn tổ chức Supabase để tạo dự án', select(r.needOrg.map(o => [o.slug, o.name]), r.needOrg[0].slug, { onChange: e => { orgSlug = e.target.value; } }))); orgSlug = r.needOrg[0].slug; msg.textContent = 'Chọn tổ chức rồi bấm "Thử lại".'; btn.textContent = 'Thử lại'; return; }
+      token.value = ''; Sync.start(); m.close && m.close(); toast('Đã tạo dự án & liên kết xong — dữ liệu đã được đẩy lên', 'ok', 5000); onDone && onDone();
+    } catch (e) { msg.className = 'banner red mt8'; msg.textContent = e.message; btn.textContent = 'Thử lại'; }
+    finally { busy = false; btn.disabled = false; }
+  };
+  const btn = h('button', { class: 'btn primary block mt8', onClick: go }, 'Bắt đầu');
+  const m = modal({ title: 'Tự động liên kết Supabase', body: h('div', null,
+    h('div', { class: 'small mb8' }, h('b', null, '1. '), 'Đăng nhập supabase.com (miễn phí) → ', h('b', null, 'Account → Access Tokens → Generate new token'), ' → chép mã (bắt đầu bằng sbp_).'),
+    h('button', { class: 'btn sm mb8', onClick: () => openUrl('https://supabase.com/dashboard/account/tokens') }, 'Mở trang tạo mã'),
+    h('div', { class: 'small mb8' }, h('b', null, '2. '), 'Dán mã vào đây rồi bấm Bắt đầu. App tạo dự án (mất 1–2 phút) và tự cài đặt.'),
+    field('Mã truy cập Supabase', token), orgSel, btn, prog,
+    h('div', { class: 'banner mt8 small' }, 'Bảo mật: mã chỉ dùng một lần trên máy này, không được lưu hay gửi đi đâu ngoài Supabase. Xong việc nên vào trang Access Tokens thu hồi (Revoke) mã đó. Mỗi tài khoản Supabase miễn phí tối đa 2 dự án đang hoạt động.'),
+    isNative() ? null : h('div', { class: 'small muted mt8' }, 'Lưu ý: trên trình duyệt web, Supabase có thể chặn kiểu gọi này — hãy dùng app Android hoặc làm thủ công.')),
+    actions: [{ label: 'Đóng' }] });
 }
 
 export function viewSync(root, ctx) {
@@ -56,7 +83,11 @@ export function viewSync(root, ctx) {
       h('div', { class: 'mt12' }, h('div', { class: 'seg' }, [['owner', 'Tôi là chủ cửa hàng'], ['join', 'Máy thứ hai (có mã)']].map(([k, l]) => h('button', { class: mode === k ? 'on' : '', onClick: () => { mode = k; draw(); } }, l)))),
       mode === 'join' ? h('div', { class: 'card mt12' }, h('h3', null, 'Kết nối vào cửa hàng có sẵn'), h('p', { class: 'small muted', style: { marginTop: 0 } }, 'Trên máy chủ cửa hàng vào Thêm → Đồng bộ nhiều máy → "Thêm máy", app sẽ cho một mã (và mã QR). Nhập mã đó vào đây.'), h('button', { class: 'btn primary block', onClick: () => joinDialog(() => ctx.go('pos')) }, 'Nhập mã kết nối'))
       : h('div', { class: 'mt12' },
-        step(1, 'Tạo dự án Supabase miễn phí', h('div', { class: 'small' }, 'Đăng ký bằng GitHub/Google → New project → đặt tên & mật khẩu cơ sở dữ liệu → vùng gần nhất (Singapore) → gói Free. Chờ ~2 phút cho dự án khởi tạo.'),
+        h('div', { class: 'card' }, h('div', { class: 'bold mb8' }, '⚡ Tự động liên kết Supabase'),
+          h('div', { class: 'small mb8' }, 'App tự tạo dự án Supabase, cài hàm đồng bộ và liên kết giúp bạn — không cần chép script hay khoá. Bạn chỉ cần tài khoản Supabase miễn phí và một mã truy cập cá nhân.'),
+          h('button', { class: 'btn primary block', onClick: () => { if (!E.can('settings')) return toast('Chỉ chủ cửa hàng mới thiết lập được', 'error'); autoDialog(draw); } }, icon('cloud', 18), ' Tự động tạo & liên kết'),
+          h('div', { class: 'small muted mt8' }, 'Hoặc làm thủ công theo 3 bước dưới đây.')),
+        step(1,'Tạo dự án Supabase miễn phí', h('div', { class: 'small' }, 'Đăng ký bằng GitHub/Google → New project → đặt tên & mật khẩu cơ sở dữ liệu → vùng gần nhất (Singapore) → gói Free. Chờ ~2 phút cho dự án khởi tạo.'),
           h('button', { class: 'btn mt8', onClick: () => openUrl('https://supabase.com/dashboard/new') }, icon('cloud', 18), ' Mở Supabase')),
         step(2, 'Cài hàm đồng bộ (chạy script SQL một lần)', h('div', { class: 'small' }, 'Nhấn nút để sao chép script → trong Supabase mở ', h('b', null, 'SQL Editor → New query'), ', dán vào rồi bấm ', h('b', null, 'Run'), ' (phải báo Success). Script chứa khoá riêng của cửa hàng — không gửi cho ai.'),
           h('div', { class: 'row mt8' }, h('button', { class: 'btn primary', onClick: async () => { const s = Sync.sqlScript(); sqlBox.value = s; sqlBox.classList.remove('hide'); toast((await copyText(s)) ? 'Đã sao chép script SQL' : 'Không tự sao chép được — hãy chọn và sao chép trong khung bên dưới', 'ok', 3500); } }, icon('download', 18), ' Sao chép script SQL'), h('button', { class: 'btn', onClick: () => { sqlBox.value = Sync.sqlScript(); sqlBox.classList.toggle('hide'); } }, 'Xem script')), h('div', { class: 'mt8' }, sqlBox)),

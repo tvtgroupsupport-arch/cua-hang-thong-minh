@@ -19,6 +19,7 @@ let makeTransport = cfg => httpTransport({ url: cfg.url, anon: cfg.anon });
 export const setTransportFactory = f => { makeTransport = f || (cfg => httpTransport({ url: cfg.url, anon: cfg.anon })); };
 
 /* ---------- Cấu hình & trạng thái ---------- */
+export const transport = cfg => makeTransport(cfg);
 export const config = () => S.meta.sync || null;
 export const isEnabled = () => !!(S.meta.sync && S.meta.sync.enabled);
 function saveConfig(patch) { S.setMeta('sync', Object.assign({}, S.meta.sync || {}, patch)); }

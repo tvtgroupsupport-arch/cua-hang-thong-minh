@@ -1,7 +1,7 @@
 /* CẦU NỐI NATIVE — esbuild đóng gói thành www/native-bridge.js (IIFE) và nạp khi chạy trong vỏ Capacitor (Android).
    Gom mọi lời gọi plugin vào một chỗ; phần còn lại của app chỉ dùng `window.NativeBridge` (không có thì dùng phương án dự phòng cho trình duyệt).
    Cách dùng từng plugin theo đúng mã đã chạy được của app BEPO (quét mã, lưu/chia sẻ tệp, in ảnh qua máy in nhiệt, độ sáng, rung, nút Back). */
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, CapacitorHttp } from '@capacitor/core';
 import { App } from '@capacitor/app';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
@@ -119,4 +119,7 @@ const printer = {
 /* ---------- Mở trang web ngoài (hướng dẫn tạo Supabase…) ---------- */
 const openUrl = url => { if (!String(url).toLowerCase().startsWith('https://')) throw new Error('Chỉ mở được địa chỉ https'); return Browser.open({ url }); };
 
-window.NativeBridge = { isNative, platform: Capacitor.getPlatform(), scan, saveFile, shareText, where, brightness, haptics, app, printer, openUrl };
+/** HTTP native: không bị chặn CORS (dùng gọi Management API của Supabase). */
+const http = async ({ url, method = 'GET', headers = {}, body }) => { const r = await CapacitorHttp.request({ url, method, headers, data: body, responseType: 'json' }); return { status: r.status, data: r.data }; };
+
+window.NativeBridge = { isNative, http, platform: Capacitor.getPlatform(), scan, saveFile, shareText, where, brightness, haptics, app, printer, openUrl };
