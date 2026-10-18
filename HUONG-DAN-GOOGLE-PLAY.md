@@ -34,10 +34,35 @@ App **không bao giờ** tự quyết "đã mua" — chỉ máy chủ (sau khi t
 4. (Tuỳ chọn) gói 1 tháng thêm **ưu đãi dùng thử miễn phí** có Offer ID `free-trial` (nếu đặt mã khác, đặt secret `TRIAL_OFFER_ID` cho `verify-purchase`).
    Muốn đổi mã gói / thêm gói: sửa bảng `play_products` trong `supabase/central-setup.sql` và `PRODUCT_IDS`, `BASE_PLANS` trong `www/js/cloud/play-billing.js` cho khớp.
 
-## Bước 2 — Google Cloud: tài khoản dịch vụ
-1. Play Console → **Setup → API access** → liên kết một dự án Google Cloud (tạo mới nếu chưa có); bật **Google Play Android Developer API**.
-2. Tạo **service account** trong Google Cloud, quay lại Play Console bấm **Grant access**, cấp quyền **Financial data** và **View app information** cho app ở Bước 1.
-3. Google Cloud → IAM → Service accounts → tài khoản đó → **Keys → Add key → JSON** → tải file. **File này mở được toàn quyền xem giao dịch thật — giữ kín, không commit vào git.**
+## Bước 2 — Google Cloud: tài khoản dịch vụ (service account)
+Mục đích: để máy chủ (Edge Function `verify-purchase`) **hỏi lại Google** xem mã giao dịch có thật không. Làm lần lượt:
+
+**2.1 — Tạo/chọn dự án Google Cloud và bật API**
+1. Vào https://console.cloud.google.com (đăng nhập cùng tài khoản Google đang dùng Play Console).
+2. Thanh trên cùng → chọn dự án → **New project** (tên tuỳ ý, vd. `tap-hoa-play`) → Create, rồi chọn dự án đó.
+3. Menu ☰ → **APIs & Services → Library** → tìm **Google Play Android Developer API** → **Enable**.
+
+**2.2 — Tạo service account + khoá JSON**
+1. Menu ☰ → **IAM & Admin → Service Accounts → Create service account**.
+2. Đặt tên (vd. `play-billing`) → **Create and continue** → bỏ qua phần chọn quyền (không cần gán role nào) → **Done**.
+3. Bấm vào tài khoản vừa tạo → **chép địa chỉ email** của nó (dạng `play-billing@tap-hoa-play.iam.gserviceaccount.com`) — cần ở bước 2.3.
+4. Tab **Keys → Add key → Create new key → JSON → Create**: trình duyệt tải về một tệp `.json`. **Tệp này cho toàn quyền xem/xử lý giao dịch thật — giữ kín, không commit vào git, không gửi qua chat/email.**
+   Nếu báo "Service account key creation is disabled" (chính sách tổ chức), cần bật quyền tạo khoá cho tổ chức hoặc dùng dự án Google Cloud cá nhân.
+
+**2.3 — Cấp quyền cho service account trong Play Console**
+(Trang *Setup → API access* cũ đã bị Google gỡ ở nhiều tài khoản; cách dưới đây dùng được ở mọi tài khoản.)
+1. Play Console → **Users and permissions** (Người dùng và quyền) → **Invite new users**.
+2. Ô email: dán **email service account** ở bước 2.2.3.
+3. Tab **App permissions** → **Add app** → chọn app Tạp Hóa của bạn → **Apply**, rồi tích các quyền:
+   - **View app information and download bulk reports (read-only)**
+   - **View financial data, orders, and cancellation survey responses**
+   - **Manage orders and subscriptions** — *cần để máy chủ xác nhận (acknowledge) giao dịch; thiếu quyền này Google tự hoàn tiền sau 3 ngày*
+   - (chỉ nếu dùng tính năng tự tải `.aab` bằng CI) **Release to testing tracks**
+4. **Invite user** → **Send invitation** (service account được chấp nhận tự động, không cần mở email).
+5. Quyền có thể mất từ vài phút tới **vài giờ** (hiếm khi lâu hơn) mới có hiệu lực — đừng vội kết luận lỗi nếu bước thử sau báo "permission denied/401/403".
+
+**2.4 — Cất tệp JSON an toàn**
+Chép tệp `.json` vào thư mục `play-store/` của dự án (đã nằm trong `.gitignore`, cạnh khoá ký) và sao lưu nơi an toàn. Bước 4 sẽ đặt nội dung tệp này thành secret `PLAY_SERVICE_ACCOUNT_JSON` trên Supabase (và trên GitHub nếu dùng tự tải lên).
 
 ## Bước 3 — Supabase trung tâm: chạy lại script SQL
 SQL Editor → chạy lại toàn bộ `supabase/central-setup.sql` mới nhất (chạy lại nhiều lần vẫn an toàn). Việc này thêm bảng `play_purchases`, `play_products`, `trial_devices`, `denied_trial_tokens`, các hàm `record_play_purchase`, `find_play_purchase_owner`, `claim_trial_use` (chỉ service_role gọi được) và cột `subscriptions.source` / `bonus_until`.
