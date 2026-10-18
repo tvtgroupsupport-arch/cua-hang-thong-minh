@@ -1,0 +1,10 @@
+# Cấu hình tối thiểu để Supabase CLI nhận ra thư mục supabase/ (deploy Edge Function lên dự án trung tâm).
+project_id = "cuahangtaphoagoicuoc"
+
+# Pub/Sub (rtdn-webhook) và trình duyệt quay về từ Supabase (provision-callback) không mang JWT của người dùng:
+# hai hàm này tự bảo vệ bằng mã bí mật / tham số state một lần dùng (xem comment đầu mỗi hàm).
+[functions.rtdn-webhook]
+verify_jwt = false
+
+[functions.provision-callback]
+verify_jwt = false

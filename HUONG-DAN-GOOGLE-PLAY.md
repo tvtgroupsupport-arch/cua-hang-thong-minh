@@ -67,24 +67,27 @@ Chép tệp `.json` vào thư mục `play-store/` của dự án (đã nằm tro
 ## Bước 3 — Supabase trung tâm: chạy lại script SQL
 SQL Editor → chạy lại toàn bộ `supabase/central-setup.sql` mới nhất (chạy lại nhiều lần vẫn an toàn). Việc này thêm bảng `play_purchases`, `play_products`, `trial_devices`, `denied_trial_tokens`, các hàm `record_play_purchase`, `find_play_purchase_owner`, `claim_trial_use` (chỉ service_role gọi được) và cột `subscriptions.source` / `bonus_until`.
 
-## Bước 4 — Deploy 2 Edge Function (cần Supabase CLI)
-```bash
-npm install -g supabase
-supabase login
-supabase link --project-ref <mã-dự-án-trung-tâm>
+## Bước 4 — Deploy 2 Edge Function (Windows + PowerShell, dùng `npx`, không cần cài gì thêm, không cần Docker)
+Mở PowerShell tại thư mục dự án (`cd "D:Claudequan ly cua hang tap hoa"`). Cần Node.js (đã có nếu `node --version` chạy được).
+
+1. Đăng nhập (mở trình duyệt để cho phép): `npx supabase login`
+2. Nối với dự án trung tâm — `<ref>` là **Reference ID** ở Supabase → Project Settings → General (hoặc phần đầu địa chỉ `https://<ref>.supabase.co`):
+   `npx supabase link --project-ref <ref>` (hỏi mật khẩu database thì bấm Enter bỏ qua)
+3. Tạo tệp secret (đặt tên tệp JSON ở Bước 2 cho đúng) rồi nạp lên Supabase. **Tệp `play.env` chứa khoá bí mật — nằm trong `play-store/` đã bị .gitignore, không đưa lên git/chat:**
+```powershell
+$json = (Get-Content -Raw "play-storeTEN-FILE-JSON.json" | ConvertFrom-Json | ConvertTo-Json -Compress)
+$secret = ([guid]::NewGuid().ToString('N') + [guid]::NewGuid().ToString('N'))
+"PLAY_PACKAGE_NAME=<PLAY_APP_ID>`nPLAY_SERVICE_ACCOUNT_JSON='$json'`nRTDN_SECRET=$secret" | Set-Content play-storeplay.env -Encoding ascii
+npx supabase secrets set --env-file play-storeplay.env
 ```
-Đặt secret (giá trị bí mật, không nằm trong code):
-```bash
-supabase secrets set PLAY_PACKAGE_NAME=<PLAY_APP_ID>
-supabase secrets set PLAY_SERVICE_ACCOUNT_JSON="$(cat duong-dan-file-json-buoc-2.json)"
-supabase secrets set RTDN_SECRET="$(openssl rand -hex 24)"      # ghi lại giá trị này, cần ở Bước 5
+   `RTDN_SECRET` (chuỗi ngẫu nhiên) nằm trong `play-storeplay.env` — mở tệp đó để chép giá trị, cần ở Bước 5. Mã ưu đãi dùng thử mặc định `free-trial`; nếu bạn đặt mã khác trên Play Console, thêm dòng `TRIAL_OFFER_ID=<mã>` vào tệp rồi nạp lại.
+4. Deploy (`supabase/config.toml` đã đặt sẵn `rtdn-webhook` không kiểm JWT):
+```powershell
+npx supabase functions deploy verify-purchase
+npx supabase functions deploy rtdn-webhook --no-verify-jwt
 ```
-Deploy:
-```bash
-supabase functions deploy verify-purchase
-supabase functions deploy rtdn-webhook --no-verify-jwt
-```
-`rtdn-webhook` bắt buộc `--no-verify-jwt` (Pub/Sub không gửi JWT Supabase; hàm tự kiểm `RTDN_SECRET` trong đường dẫn).
+   Nếu CLI đòi Docker, thêm `--use-api` vào lệnh deploy.
+5. Kiểm tra: Supabase → **Edge Functions** phải thấy 2 hàm `verify-purchase` (có JWT) và `rtdn-webhook` (không JWT); mục **Edge Functions → Secrets** có 3 tên `PLAY_PACKAGE_NAME`, `PLAY_SERVICE_ACCOUNT_JSON`, `RTDN_SECRET`. Xem nhật ký lỗi: `npx supabase functions logs verify-purchase` (hoặc trên dashboard → Logs).
 
 ## Bước 5 — Pub/Sub: nhận thông báo real-time (RTDN)
 Không có bước này app không biết khi nào khách **huỷ** gói trên Google — vẫn tưởng còn hạn mãi.
