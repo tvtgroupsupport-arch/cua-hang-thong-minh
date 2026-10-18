@@ -3,7 +3,10 @@ name: Kiểm tra build bản Google Play (thử, không cần Secrets)
 # Chạy thử TOÀN BỘ chuỗi build .aab với cấu hình giả + khoá ký tạm sinh ngay trên máy chủ build, để biết trước chuỗi vá plugin / ký / R8 / bundleRelease có lỗi không
 # mà không cần Secrets thật. File .aab ra từ đây KHÔNG dùng để phát hành (ký bằng khoá tạm, địa chỉ máy chủ giả).
 on:
-  workflow_dispatch:      # chỉ chạy khi bấm tay (đã tắt tự chạy mỗi lần đẩy mã)
+  workflow_dispatch:
+  push:               # TẠM BẬT để kiểm tra bản gộp JS — sẽ tắt lại sau lần chạy này
+    branches: [main]
+    paths: ['scripts/bundle-web.mjs']
 
 jobs:
   check:
@@ -26,6 +29,11 @@ jobs:
           PLAY_APP_ID: vn.taphoa.quanly.play
         run: node scripts/write-app-config.mjs
       - run: npm run build
+
+      # Gộp toàn bộ JS vào một index.html duy nhất (như app BEPO) — Windows Defender từng báo nhầm một tệp .js rời trong .aab
+      - name: Gộp JS giao diện vào index.html
+        run: node scripts/bundle-web.mjs www
+
       - run: test -d android || npx cap add android
       - run: node scripts/make-icons.mjs
       - name: Sinh khoá ký tạm (bằng đúng công cụ Node mà bạn sẽ dùng — kiểm tra luôn Gradle ký được bằng khoá PKCS12 do nó tạo)

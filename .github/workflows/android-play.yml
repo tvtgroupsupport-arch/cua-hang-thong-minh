@@ -44,6 +44,11 @@ jobs:
       - name: Đóng gói cầu nối native
         run: npm run build
 
+      # Gộp toàn bộ JS vào một index.html duy nhất (như app BEPO) — Windows Defender từng báo nhầm một tệp .js rời trong .aab
+      - name: Gộp JS giao diện vào index.html
+        run: node scripts/bundle-web.mjs www
+
+
       - name: Thêm nền tảng Android
         run: test -d android || npx cap add android
 

@@ -11,6 +11,7 @@ export const isNative = () => !!(nb() && nb().isNative);
 
 /** Nạp cầu nối native (chỉ trong vỏ Capacitor). Quá 6 giây không nạp được thì bỏ qua để app vẫn khởi động. */
 export function loadNativeBridge() {
+  if (window.NativeBridge && window.NativeBridge.isNative) return Promise.resolve(true);      // bản đã gộp (scripts/bundle-web.mjs) nhúng sẵn cầu nối trong index.html
   const cap = window.Capacitor;
   if (!(cap && cap.isNativePlatform && cap.isNativePlatform())) return Promise.resolve(false);
   return new Promise(res => {
