@@ -35,8 +35,9 @@ jobs:
       - run: npm run build
       - run: test -d android || npx cap add android
       - run: node scripts/make-icons.mjs
-      - name: Sinh khoá ký tạm
-        run: keytool -genkeypair -v -keystore android/app/release.keystore -alias thu -keyalg RSA -keysize 2048 -validity 100 -storepass thuthu123 -keypass thuthu123 -dname "CN=Kiem tra"
+      - name: Sinh khoá ký tạm (bằng đúng công cụ Node mà bạn sẽ dùng — kiểm tra luôn Gradle ký được bằng khoá PKCS12 do nó tạo)
+        env: { KS_DIR: android/app, KS_PASS: thuthu123, KS_ALIAS: thu }
+        run: node scripts/make-release-keystore.mjs && keytool -list -keystore android/app/release.keystore -storepass thuthu123 | head -5
       - name: Đồng bộ + vá (ký, R8, SDK)
         env:
           GITHUB_RUN_NUMBER: ${{ github.run_number }}
