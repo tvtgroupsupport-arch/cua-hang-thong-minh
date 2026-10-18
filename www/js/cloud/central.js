@@ -6,7 +6,21 @@ let fetchImpl = (...a) => fetch(...a);
 export const setFetch = f => { fetchImpl = f || ((...a) => fetch(...a)); };
 let cfgOverride = null;
 export const setConfig = c => { cfgOverride = c; };
-export const cfg = () => cfgOverride || (typeof window !== 'undefined' && window.APP_CONFIG) || {};
+const buildCfg = () => (typeof window !== 'undefined' && window.APP_CONFIG) || {};
+/** Cấu hình máy chủ trung tâm: ưu tiên (1) đặt cho kiểm thử, (2) cấu hình khi build (app-config.js), (3) do người dùng nhập trong app (chỉ khi build không có). */
+export const cfg = () => cfgOverride || (buildCfg().centralUrl ? buildCfg() : Object.assign({ localTrialDays: 14 }, buildCfg(), S.meta.centralCfg || {}));
+/** Máy chủ do người dùng nhập trong app (không phải cấu hình lúc build) — cho phép đổi/gỡ. */
+export const isCustomConfig = () => !cfgOverride && !buildCfg().centralUrl && !!(S.meta.centralCfg && S.meta.centralCfg.centralUrl);
+/** Lưu máy chủ trung tâm nhập tay. Chỉ nhận khoá anon/publishable — từ chối khoá bí mật (service_role / sb_secret_). */
+export function setLocalConfig(url, key) {
+  url = String(url || '').trim().replace(/\/+$/, ''); key = String(key || '').trim();
+  if (!/^https:\/\/[A-Za-z0-9._-]+$/.test(url)) throw new CentralError('Địa chỉ phải có dạng https://xxxx.supabase.co', 'input');
+  if (key.length < 20) throw new CentralError('Khoá anon/publishable quá ngắn', 'input');
+  let role = ''; try { role = JSON.parse(atob(key.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).role || ''; } catch (e) { /* khoá dạng sb_publishable_… không phải JWT */ }
+  if (role === 'service_role' || /^sb_secret_/.test(key)) throw new CentralError('Đây là khoá BÍ MẬT — chỉ được dán khoá anon / publishable, tuyệt đối không dùng service_role / secret', 'input');
+  S.setMeta('centralCfg', { centralUrl: url, centralAnonKey: key });
+}
+export function clearLocalConfig() { if (S.meta.centralCfg) { signOut(); S.setMeta('centralCfg', null); } }
 export const configured = () => /^https:\/\//.test(cfg().centralUrl || '') && (cfg().centralAnonKey || '').length > 20;
 const base = () => String(cfg().centralUrl).replace(/\/+$/, '');
 

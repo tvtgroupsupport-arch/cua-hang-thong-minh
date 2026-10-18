@@ -229,6 +229,28 @@ test('tự tạo Supabase qua OAuth: start → chờ Authorize → các bước 
   Sync.setTransportFactory(null);
 });
 
+test('máy chủ nhập trong app: nhận khoá anon, từ chối khoá bí mật; bật/gỡ → bản miễn phí ↔ có gói cước', async () => {
+  Central.setConfig(null); const keep = window.APP_CONFIG; window.APP_CONFIG = {};
+  try {
+    await freshStore(); License.init();
+    eq(License.enabled(), false); eq(Central.isCustomConfig(), false);
+    const jwt = role => 'x.' + btoa(JSON.stringify({ role })).replace(/=+$/, '') + '.y';
+    await rejects(async () => Central.setLocalConfig('http://a.supabase.co', jwt('anon') + 'a'.repeat(20)), /https/, 'http thường');
+    await rejects(async () => Central.setLocalConfig('https://a.supabase.co', 'ngan'), /quá ngắn/);
+    await rejects(async () => Central.setLocalConfig('https://a.supabase.co', jwt('service_role') + 'a'.repeat(20)), /BÍ MẬT/, 'service_role');
+    await rejects(async () => Central.setLocalConfig('https://a.supabase.co', 'sb_secret_' + 'a'.repeat(30)), /BÍ MẬT/, 'sb_secret');
+    eq(License.enabled(), false, 'khoá sai không được lưu');
+    Central.setLocalConfig('https://a.supabase.co/', jwt('anon') + 'a'.repeat(20));
+    eq(Central.cfg().centralUrl, 'https://a.supabase.co'); eq(License.enabled(), true); eq(Central.isCustomConfig(), true);
+    License.ensureTrialStart(); eq(License.status().state, 'ok'); eq(License.status().daysLeft, 14);
+    ok(!JSON.stringify(S.dump()).includes('a.supabase.co'), 'cấu hình máy chủ không nằm trong sao lưu');
+    window.APP_CONFIG = { centralUrl: 'https://build.supabase.co', centralAnonKey: 'k'.repeat(40) };   // cấu hình lúc build luôn thắng
+    eq(Central.cfg().centralUrl, 'https://build.supabase.co'); eq(Central.isCustomConfig(), false);
+    window.APP_CONFIG = {};
+    Central.clearLocalConfig(); eq(License.enabled(), false); eq(License.status().locked, false);
+  } finally { window.APP_CONFIG = keep; }
+});
+
 const out = document.getElementById('out');
 let pass = 0, failN = 0;
 for (const [name, fn] of tests) {

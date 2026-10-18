@@ -14,7 +14,7 @@ export const DB_VERSION = 1;
 export const SYNC_COLLS = COLLS.filter(c => c !== 'logs' && c !== 'holds');
 const SYNC_SET = new Set(SYNC_COLLS);
 export const SYNC_META = ['settings', 'openingBalance', 'license'];
-export const LOCAL_META = ['sync', 'syncq', 'syncDraft', 'lastBackup', 'central', 'clockHw', 'trialStart'];
+export const LOCAL_META = ['sync', 'syncq', 'syncDraft', 'lastBackup', 'central', 'centralCfg', 'clockHw', 'trialStart'];
 
 /* ---------- Adapter lưu trữ ---------- */
 export function memoryAdapter() {

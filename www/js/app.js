@@ -21,6 +21,7 @@ import * as Sync from './sync/engine.js';
 import * as License from './license.js';
 import * as Central from './cloud/central.js';
 import { viewPlan } from './views/plan.js';
+import { viewPlanAdmin } from './views/planadmin.js';
 
 const SESSION_KEY = 'taphoa.staff';
 /* path, tiêu đề, quyền cần có (một trong), mục nav */
@@ -41,6 +42,7 @@ const ROUTES = {
   export: { title: 'Xuất báo cáo', perm: ['viewReports', 'manageStock', 'cashbook', 'manageProducts'], nav: 'reports', view: viewExport },
   sync: { title: 'Đồng bộ nhiều máy', perm: [], nav: 'more', view: viewSync },
   plan: { title: 'Gói cước & tài khoản', perm: [], nav: 'more', view: viewPlan },
+  planadmin: { title: 'Quản trị gói cước', perm: ['settings'], nav: 'more', view: viewPlanAdmin },
   help: { title: 'Hướng dẫn', perm: [], nav: 'more', view: viewHelp }
 };
 const NAV = [['pos', 'Bán hàng', 'cart'], ['products', 'Hàng hóa', 'box'], ['stock', 'Kho', 'warehouse'], ['reports', 'Báo cáo', 'chart'], ['more', 'Thêm', 'menu']];
@@ -137,7 +139,7 @@ function handleBack() {
   const cp = document.querySelector('.cartpage.open .cp-back'); if (cp) { cp.click(); return true; }      // đang xem giỏ hàng → quay lại danh sách sản phẩm
   if (!shell) return false;
   const name = (location.hash.replace(/^#\/?/, '') || '').split('/')[0];
-  if (name && name !== 'pos' && ['sales', 'customers', 'suppliers', 'promos', 'cash', 'settings', 'staff', 'logs', 'help'].includes(name)) { go('more'); return true; }
+  if (name && name !== 'pos' && ['sales', 'customers', 'suppliers', 'promos', 'cash', 'settings', 'staff', 'logs', 'help', 'plan', 'planadmin'].includes(name)) { go('more'); return true; }
   if (name && name !== 'pos') { go('pos'); return true; }
   return false;
 }
