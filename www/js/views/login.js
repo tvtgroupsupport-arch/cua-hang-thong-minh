@@ -4,7 +4,7 @@ import * as E from '../engine/index.js';
 import { h, icon, mount, field, guard, toast, checkbox } from '../ui.js';
 import { joinDialog } from './sync.js';
 
-const logo = () => h('div', { class: 'logo' }, icon('shop'));
+const logo = () => h('img', { class: 'logo-img', src: 'icon.svg', alt: 'Tạp Hóa', width: 84, height: 84 });
 
 export function viewLogin(root, { done }) {
   document.title = 'Tạp Hóa';

@@ -29,6 +29,8 @@ jobs:
         run: npm run build
       - name: Thêm nền tảng Android
         run: test -d android || npx cap add android
+      - name: Tạo biểu tượng Android từ logo (www/icon.svg)
+        run: node scripts/make-icons.mjs
       - name: Đồng bộ giao diện vào Android (cap sync)
         run: |
           set +e

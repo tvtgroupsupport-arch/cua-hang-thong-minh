@@ -7,7 +7,7 @@
   "scripts": {
     "serve": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/serve.ps1",
     "build": "node scripts/build-native.mjs",
-    "sync": "npm run build && npx cap sync android && node scripts/patch-android.mjs",
+    "sync": "npm run build && npx cap sync android && node scripts/make-icons.mjs && node scripts/patch-android.mjs",
     "apk": "npm run sync && cd android && gradlew assembleDebug"
   },
   "dependencies": {
@@ -25,6 +25,7 @@
   },
   "devDependencies": {
     "@capacitor/cli": "^7.0.0",
-    "esbuild": "^0.24.0"
+    "esbuild": "^0.24.0",
+    "sharp": "^0.33.5"
   }
 }

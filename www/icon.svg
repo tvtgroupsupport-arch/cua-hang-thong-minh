@@ -1,1 +1,19 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="110" fill="#15803d"/><g fill="none" stroke="#fff" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"><path d="M150 190h212l18 190a20 20 0 0 1-20 22H152a20 20 0 0 1-20-22z"/><path d="M200 190v-28a56 56 0 0 1 112 0v28"/></g></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Tạp Hóa">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#9b6bff"/><stop offset="1" stop-color="#4f6df5"/></linearGradient>
+    <radialGradient id="glow" cx=".25" cy=".15" r=".8"><stop offset="0" stop-color="#fff" stop-opacity=".32"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
+    <linearGradient id="face" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8b5cf6"/><stop offset="1" stop-color="#4f6df5"/></linearGradient>
+    <linearGradient id="spark" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffd166"/><stop offset="1" stop-color="#ff8a5c"/></linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="120" fill="url(#bg)"/>
+  <rect width="512" height="512" rx="120" fill="url(#glow)"/>
+  <!-- quai túi -->
+  <path d="M202 200V176a54 54 0 0 1 108 0v24" fill="none" stroke="#fff" stroke-width="26" stroke-linecap="round"/>
+  <!-- túi hàng -->
+  <path d="M148 196H364L384 372Q387 406 352 406H160Q125 406 128 372Z" fill="#fff"/>
+  <!-- mặt cười -->
+  <circle cx="216" cy="276" r="14" fill="url(#face)"/><circle cx="296" cy="276" r="14" fill="url(#face)"/>
+  <path d="M212 318Q256 362 300 318" fill="none" stroke="url(#face)" stroke-width="22" stroke-linecap="round"/>
+  <!-- tia sáng -->
+  <path d="M394 112l11 29 29 11-29 11-11 29-11-29-29-11 29-11z" fill="url(#spark)"/>
+</svg>
