@@ -1,0 +1,63 @@
+name: Kiểm tra build bản Google Play (thử, không cần Secrets)
+
+# Chạy thử TOÀN BỘ chuỗi build .aab với cấu hình giả + khoá ký tạm sinh ngay trên máy chủ build, để biết trước chuỗi vá plugin / ký / R8 / bundleRelease có lỗi không
+# mà không cần Secrets thật. File .aab ra từ đây KHÔNG dùng để phát hành (ký bằng khoá tạm, địa chỉ máy chủ giả).
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/**'
+      - 'src/**'
+      - 'package.json'
+      - '.github/workflows/android-play*.yml'
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 21 }
+      - run: npm install
+      - name: Vá plugin Google Play Billing (--strict)
+        run: node scripts/patch-plugins.mjs --strict
+      - name: Ghi cấu hình bản Google Play (giả)
+        env:
+          CENTRAL_SUPABASE_URL: https://thu-nghiem.supabase.co
+          CENTRAL_SUPABASE_ANON_KEY: khoa-anon-gia-chi-de-kiem-tra-build
+          BILLING_MODE: play
+          PLAY_APP_ID: vn.taphoa.quanly.play
+        run: node scripts/write-app-config.mjs
+      - run: npm run build
+      - run: test -d android || npx cap add android
+      - run: node scripts/make-icons.mjs
+      - name: Sinh khoá ký tạm
+        run: keytool -genkeypair -v -keystore android/app/release.keystore -alias thu -keyalg RSA -keysize 2048 -validity 100 -storepass thuthu123 -keypass thuthu123 -dname "CN=Kiem tra"
+      - name: Đồng bộ + vá (ký, R8, SDK)
+        env:
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          set +e
+          npx cap sync android > /tmp/step.log 2>&1; rc=$?
+          cat /tmp/step.log
+          if [ $rc -ne 0 ]; then echo "::error title=cap sync lỗi::$(tail -c 900 /tmp/step.log | tr '\n' '|' | tr -d '%\r')"; exit $rc; fi
+          node scripts/patch-android.mjs > /tmp/step.log 2>&1; rc=$?
+          cat /tmp/step.log
+          if [ $rc -ne 0 ]; then echo "::error title=patch-android lỗi::$(tail -c 900 /tmp/step.log | tr '\n' '|' | tr -d '%\r')"; exit $rc; fi
+      - name: Biên dịch .aab đã ký (R8 bật)
+        working-directory: android
+        env:
+          ANDROID_KEYSTORE_PASSWORD: thuthu123
+          ANDROID_KEY_ALIAS: thu
+          ANDROID_KEY_PASSWORD: thuthu123
+        run: |
+          set +e
+          ./gradlew bundleRelease --no-daemon > /tmp/step.log 2>&1; rc=$?
+          tail -n 120 /tmp/step.log
+          if [ $rc -ne 0 ]; then echo "::error title=gradle bundleRelease lỗi::$(grep -E 'error|Error|FAILED|What went wrong|Could not|Missing class|R8|> ' /tmp/step.log | head -c 1500 | tr '\n' '|' | tr -d '%\r')"; exit $rc; fi
+          ls -l app/build/outputs/bundle/release/
+          test -f app/build/outputs/mapping/release/mapping.txt && echo "có mapping.txt (R8)" || echo "::warning::không thấy mapping.txt"
