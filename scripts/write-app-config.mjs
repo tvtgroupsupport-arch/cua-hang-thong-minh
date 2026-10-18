@@ -5,11 +5,13 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 const env = n => (process.env[n] || '').trim();
 const url = env('CENTRAL_SUPABASE_URL'), key = env('CENTRAL_SUPABASE_ANON_KEY'), mode = env('BILLING_MODE') === 'play' ? 'play' : 'manual';
+/** Báo lỗi dạng annotation của GitHub Actions (hiện ngay ở trang tóm tắt lần chạy) rồi dừng. */
+const die = msg => { console.error(`::error title=Cấu hình bản build::${msg}`); process.exit(1); };
 const MANUAL_APP_ID = 'vn.taphoa.quanly';
-if (mode === 'play' && (!url || !key)) { console.error('Bản Google Play cần CENTRAL_SUPABASE_URL và CENTRAL_SUPABASE_ANON_KEY (máy chủ gói cước)'); process.exit(1); }
+if (mode === 'play' && (!url || !key)) { die('Bản Google Play cần CENTRAL_SUPABASE_URL và CENTRAL_SUPABASE_ANON_KEY (máy chủ gói cước)'); }
 if (!url || !key) { console.log('Không có CENTRAL_SUPABASE_URL/ANON_KEY → build bản MIỄN PHÍ (không gói cước).'); process.exit(0); }
-if (!/^https:\/\/[A-Za-z0-9._-]+$/.test(url)) { console.error('CENTRAL_SUPABASE_URL không hợp lệ (dạng https://xxxx.supabase.co, không có dấu / cuối)'); process.exit(1); }
-if (/service_role|sb_secret_/.test(key)) { console.error('Đây là khoá BÍ MẬT — chỉ được dùng khoá anon/publishable'); process.exit(1); }
+if (!/^https:\/\/[A-Za-z0-9._-]+$/.test(url)) { die('CENTRAL_SUPABASE_URL không hợp lệ (dạng https://xxxx.supabase.co, không có dấu / cuối)'); }
+if (/service_role|sb_secret_/.test(key)) { die('Đây là khoá BÍ MẬT — chỉ được dùng khoá anon/publishable'); }
 const cfg = { centralUrl: url, centralAnonKey: key, supportText: env('SUPPORT_TEXT'), localTrialDays: Number(env('LOCAL_TRIAL_DAYS') || 14), billingMode: mode };
 const plans = env('PLAN_PRICES');      // vd. 1:99000,6:499000,12:899000 (bản Google Play lấy giá thật từ Google, không dùng)
 if (plans) cfg.plans = plans.split(',').map(s => s.split(':')).map(([m, p]) => ({ months: Number(m), price: Number(p) })).filter(x => x.months && x.price);
@@ -21,8 +23,8 @@ const capFile = 'capacitor.config.json', cap = JSON.parse(readFileSync(capFile, 
 let appId = MANUAL_APP_ID;
 if (mode === 'play') {
   appId = env('PLAY_APP_ID');
-  if (!/^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/.test(appId)) { console.error('PLAY_APP_ID không hợp lệ (vd. vn.taphoa.quanly.play)'); process.exit(1); }
-  if (appId === MANUAL_APP_ID) { console.error('PLAY_APP_ID phải KHÁC ' + MANUAL_APP_ID + ' (bản Google Play là app riêng)'); process.exit(1); }
+  if (!/^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/.test(appId)) { die('PLAY_APP_ID không hợp lệ (vd. vn.taphoa.quanly.play)'); }
+  if (appId === MANUAL_APP_ID) { die('PLAY_APP_ID phải KHÁC ' + MANUAL_APP_ID + ' (bản Google Play là app riêng)'); }
 }
 cap.appId = appId; if (env('APP_NAME')) cap.appName = env('APP_NAME');
 writeFileSync(capFile, JSON.stringify(cap, null, 2) + '\n');
