@@ -97,3 +97,11 @@ Actions → **Build bản Google Play (AAB)** → Run workflow → tải `tap-ho
 
 ## Chưa làm so với BEPO
 Mã quyền sử dụng **có chữ ký Ed25519** (`license-token`) — hạn gói ở đây là dữ liệu thường (đủ cho rào cản cơ bản, người rành kỹ thuật có thể sửa trên máy mình); Google Play Billing chạy ở bản app riêng nên bản APK chuyển khoản vẫn dùng cách duyệt tay.
+
+## Tải `.aab` lên Google Play bằng dòng lệnh / CI (không cần tải về máy)
+Workflow **Build bản Google Play (AAB)** có thêm ô **upload** khi bấm *Run workflow* (và chọn **track**: `internal` mặc định). Bật `upload` thì sau khi build xong, workflow tự tải `.aab` (kèm `mapping.txt`) lên Play Console ở trạng thái **bản nháp** bằng `r0adkll/upload-google-play`; bạn vào Play Console xem lại rồi bấm phát hành.
+Điều kiện:
+1. GitHub Secret `PLAY_SERVICE_ACCOUNT_JSON` = nội dung file JSON của tài khoản dịch vụ (cùng loại file ở Bước 2).
+2. Play Console → **Users and permissions**: mời email của tài khoản dịch vụ và cấp quyền **Release to testing tracks** (và **Release apps to production** nếu dùng track `production`) cho app.
+3. **Bản phát hành đầu tiên của app mới phải tạo tay trên Play Console** (tải tay một `.aab` và hoàn tất mục thiết lập app); từ lần sau CI tự tải lên được. Chưa làm được bước 3 thì API báo lỗi kiểu "package not found".
+Cách chạy bằng dòng lệnh nếu máy có GitHub CLI: `gh workflow run android-play.yml -f upload=true -f track=internal`.

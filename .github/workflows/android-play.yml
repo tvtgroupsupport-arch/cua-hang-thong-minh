@@ -5,6 +5,16 @@ name: Build bản Google Play (AAB)
 # nên bản này cần build file .aab đã KÝ rồi tự tay tải lên Play Console (Internal testing) để thử. Xem HUONG-DAN-GOOGLE-PLAY.md.
 on:
   workflow_dispatch:
+    inputs:
+      upload:
+        description: 'Tự tải .aab lên Google Play (cần secret PLAY_SERVICE_ACCOUNT_JSON + app đã có bản phát hành đầu tiên tạo tay trên Play Console)'
+        type: boolean
+        default: false
+      track:
+        description: 'Kênh phát hành khi tải lên'
+        type: choice
+        options: [internal, alpha, beta, production]
+        default: internal
 
 jobs:
   aab:
@@ -83,6 +93,27 @@ jobs:
         if: steps.keystore.outputs.has_keystore != 'true'
         working-directory: android
         run: ./gradlew assembleDebug --no-daemon
+
+      # Tải thẳng lên Google Play bằng tài khoản dịch vụ (không cần tải .aab về máy). Luôn ở trạng thái NHÁP: bạn vào Play Console xem lại rồi bấm phát hành.
+      - name: Kiểm tra cấu hình tải lên Google Play
+        id: play
+        if: inputs.upload && steps.keystore.outputs.has_keystore == 'true'
+        env:
+          SA_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          if [ -z "$SA_JSON" ]; then echo "::error title=Thiếu secret::Chưa có secret PLAY_SERVICE_ACCOUNT_JSON (nội dung file JSON của tài khoản dịch vụ Google Cloud)"; exit 1; fi
+          echo "ok=true" >> "$GITHUB_OUTPUT"
+
+      - name: Tải .aab lên Google Play (bản nháp)
+        if: steps.play.outputs.ok == 'true'
+        uses: r0adkll/upload-google-play@v1.1.3
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: ${{ vars.PLAY_APP_ID }}
+          releaseFiles: android/app/build/outputs/bundle/release/app-release.aab
+          mappingFile: android/app/build/outputs/mapping/release/mapping.txt
+          track: ${{ inputs.track }}
+          status: draft
 
       - uses: actions/upload-artifact@v4
         if: steps.keystore.outputs.has_keystore == 'true'
