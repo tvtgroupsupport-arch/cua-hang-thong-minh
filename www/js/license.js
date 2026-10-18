@@ -8,6 +8,7 @@
 import { S } from './store.js';
 import { setWriteGuard } from './engine/auth.js';
 import * as Central from './cloud/central.js';
+import * as PlayBilling from './cloud/play-billing.js';
 
 const DAY = 86400000;
 export const PLAN_MONTHS = [1, 6, 12];
@@ -59,11 +60,13 @@ export function describe() {
 }
 
 /** Hỏi trung tâm (chỉ máy chủ cửa hàng, đã đăng nhập). Mất mạng thì giữ kết quả cũ. Trả về status(). */
-export async function refresh() {
+export async function refresh(force) {
   if (!enabled() || !Central.isSignedIn()) return status();
   const sync = S.meta.sync;
   if (sync && sync.enabled && sync.role !== 'owner') return status();
   try {
+    // Bản Google Play: gửi các giao dịch đang có trên máy lên máy chủ xác minh (máy chủ hỏi lại Google) TRƯỚC khi hỏi hạn gói.
+    if (PlayBilling.enabled()) await PlayBilling.syncPurchases(!!force);
     const d = await Central.rpc('get_my_subscription');
     if (d && d.expires_at) {
       seeHw(Date.parse(d.server_now));

@@ -50,3 +50,52 @@ if (fs.existsSync(varsFile)) {
   }
   fs.writeFileSync(varsFile, v);
 } else console.log('::warning title=Không có android/variables.gradle::' + fs.readdirSync(path.join(ROOT, 'android')).join(', '));
+
+/* ---------- Bản phát hành Google Play (.aab): chỉ chạy khi đã có android/app/release.keystore (xem android-play.yml) — build APK debug không bị ảnh hưởng ----------
+   Mật khẩu KHÔNG ghi cứng ở đây: đọc từ biến môi trường lúc Gradle chạy (GitHub Secrets).
+   1) Chữ ký bản release.  2) R8 (mapping.txt) + native debug symbols (hai cảnh báo của Play Console khi tải .aab).  3) Quy tắc giữ lại cho plugin thanh toán/máy in/WebView bridge. */
+const keystoreFile = path.join(ROOT, 'android/app/release.keystore');
+const gradleFile = path.join(ROOT, 'android/app/build.gradle');
+if (fs.existsSync(gradleFile) && fs.existsSync(keystoreFile)) {
+  let g = fs.readFileSync(gradleFile, 'utf8');
+  if (!g.includes('signingConfigs')) {
+    const signingBlock = `    signingConfigs {
+        release {
+            storeFile file('release.keystore')
+            storePassword System.getenv('ANDROID_KEYSTORE_PASSWORD')
+            keyAlias System.getenv('ANDROID_KEY_ALIAS')
+            keyPassword System.getenv('ANDROID_KEY_PASSWORD')
+        }
+    }
+`;
+    if (!g.includes('android {')) throw new Error('build.gradle không có khối "android {" — cấu trúc Capacitor đã đổi, cần xem lại script này.');
+    // Vá khối release TRONG buildTypes TRƯỚC, rồi mới chèn signingConfigs — làm ngược thì regex khớp nhầm "release {" của signingConfigs.
+    const buildTypesRelease = /(buildTypes\s*\{[\s\S]*?)release\s*\{/;
+    if (!buildTypesRelease.test(g)) throw new Error('build.gradle không có khối "release {" trong buildTypes — không vá được chữ ký.');
+    g = g.replace(buildTypesRelease, '$1release {\n            signingConfig signingConfigs.release');
+    g = g.replace('android {', 'android {\n' + signingBlock);
+    console.log('✓ Đã thêm cấu hình ký bản release vào build.gradle');
+  }
+  if (!g.includes('debugSymbolLevel')) {
+    const re = /(buildTypes\s*\{[\s\S]*?release\s*\{)([\s\S]*?)(\n\s*\}\s*\n\s*\})/;
+    if (!re.test(g)) throw new Error('build.gradle không có khối buildTypes/release như mong đợi — không bật được R8/biểu tượng gỡ lỗi.');
+    g = g.replace(re, (m, head, body, tail) => {
+      body = body.replace(/minifyEnabled\s+false/, 'minifyEnabled true');
+      if (!/minifyEnabled\s+true/.test(body)) body += '\n            minifyEnabled true';
+      return `${head}${body}\n            ndk { debugSymbolLevel 'SYMBOL_TABLE' }${tail}`;
+    });
+    console.log('✓ Đã bật R8 (mapping.txt) và native debug symbols cho bản release');
+  }
+  fs.writeFileSync(gradleFile, g);
+  const proguardFile = path.join(ROOT, 'android/app/proguard-rules.pro');
+  if (fs.existsSync(proguardFile)) {
+    let r = fs.readFileSync(proguardFile, 'utf8');
+    if (!r.includes('com.android.billingclient')) {
+      r += `\n# Thêm bởi scripts/patch-android.mjs\n-keep class ee.forgr.nativepurchases.** { *; }\n-keep class com.android.billingclient.** { *; }\n-keep class ee.forgr.** { *; }\n-dontwarn com.google.errorprone.annotations.**\n-keep class com.rt.printerlibrary.** { *; }\n-keep class com.clj.fastble.** { *; }\n-keep class android_serialport_api.** { *; }\n-keep class com.malik12tree.** { *; }\n-keepclassmembers class * { @android.webkit.JavascriptInterface <methods>; }\n-keepattributes *Annotation*,Signature,InnerClasses,EnclosingMethod\n-keepattributes SourceFile,LineNumberTable\n`;
+      fs.writeFileSync(proguardFile, r);
+      console.log('✓ Đã thêm quy tắc giữ lại cho R8');
+    }
+  }
+} else {
+  console.log('(Chưa có khoá ký release.keystore — bỏ qua bước ký/R8, build ra bản debug như bình thường.)');
+}

@@ -5,6 +5,7 @@ import * as License from '../license.js';
 import { h, mount, toast, guard, confirmBox, field, select, badge } from '../ui.js';
 import { fmtDateTime, fmtMoney } from '../util.js';
 import { copyText } from '../native.js';
+import * as Play from '../cloud/play-billing.js';
 
 let mode = 'signup';
 const planLabel = m => `${m} tháng`;
@@ -105,7 +106,36 @@ export function viewPlan(root, ctx) {
 
   async function loadReqs() { if (!Central.isSignedIn()) return; try { reqs = await Central.rpc('get_my_requests'); } catch (e) { reqs = reqs || []; } }
 
+  /** Bản Google Play: mua/gia hạn qua Google Play Billing (không có chuyển khoản tay — đúng chính sách của Google). */
+  function playCard() {
+    if (!Central.isSignedIn()) return h('div', { class: 'banner mt12 small' }, 'Đăng nhập tài khoản lưu trữ ở trên để mua gói cước qua Google Play.');
+    const s = Play.state();
+    if (!s.products && !s.loading) Play.loadProducts();
+    else if (s.products && s.products.length) Play.refreshQuiet(false);
+    const buy = async (id, force) => {
+      if (!canManage) return toast('Chỉ chủ cửa hàng mới mua được', 'error');
+      const r = await Play.purchase(id, { force });
+      if (r.status === 'ok' || r.status === 'pending' || r.status === 'already') { await License.refresh(true); toast(r.status === 'pending' ? 'Đang chờ Google xác nhận thanh toán — gói sẽ tự kích hoạt khi xong' : r.status === 'already' ? 'Bạn đang có gói này trên Google Play — đã cập nhật lại trạng thái' : 'Đã kích hoạt gói cước thành công', 'ok', 5000); draw(); }
+      else if (r.status === 'other') { if (await confirmBox(`Tài khoản Google Play trên máy này đang đăng ký gói ${r.have.join(', ')}. Mua thêm gói ${Play.labelOf(id)} sẽ bị tính tiền CẢ HAI gói (Google không tự thay gói cũ). Muốn đổi gói: huỷ gói cũ ở "Quản lý gói trên Google Play" rồi mua gói mới khi gói cũ hết hạn.`, { okText: 'Vẫn mua thêm', danger: true })) buy(id, true); }
+      else if (r.status === 'trial-gone') toast('Ưu đãi dùng thử không còn áp dụng cho tài khoản Google này — kiểm tra giá rồi bấm mua lại', 'error', 6000);
+      else if (r.status === 'trial-used') await confirmBox(r.message, { okText: 'Đã hiểu' });
+      else if (r.status === 'cancelled') toast('Đã huỷ');
+      else if (r.status === 'error') toast(r.message, 'error', 6000);
+    };
+    const prods = s.products || [];
+    return h('div', { class: 'card mt12' }, h('div', { class: 'bold mb8' }, 'Chọn gói — thanh toán qua Google Play'),
+      s.loading ? h('div', { class: 'small muted' }, 'Đang tải danh sách gói…') : null,
+      s.products && !prods.length && !s.loading ? h('div', { class: 'banner amber small' }, 'Không tải được gói cước — kiểm tra đã đăng nhập tài khoản Google có quyền mua hàng trên thiết bị này chưa, hoặc thử lại sau.', s.error ? h('div', { class: 'mt8', style: { wordBreak: 'break-word' } }, 'Chi tiết: ' + s.error) : null, h('button', { class: 'btn sm mt8', onClick: () => Play.loadProducts(true) }, 'Thử tải lại')) : null,
+      h('div', { class: 'list' }, prods.map(p => { const id = Play.productIdOf(p), tr = p.trial; return h('button', { class: 'item', disabled: s.busy, style: { width: '100%', textAlign: 'left' }, onClick: () => buy(id) },
+        h('div', { class: 'grow' }, h('div', { class: 'ttl' }, Play.labelOf(id)), h('div', { class: 'sub' }, p.title || ''), tr ? h('div', { class: 'small', style: { color: 'var(--ok)', fontWeight: 700 } }, Play.trialLabel(tr) + ' · sau đó ' + (tr.thenPrice || p.priceString || '') + '/' + Play.labelOf(id)) : null),
+        tr ? badge('Dùng thử miễn phí', 'green') : h('div', { class: 'bold' }, p.priceString || '')); })),
+      prods.some(p => p.trial) ? h('div', { class: 'banner amber small mt8' }, 'Dùng thử miễn phí: Google chưa tính tiền trong thời gian dùng thử. Hãy huỷ gói trong Google Play trước khi hết dùng thử nếu không muốn bị tính tiền.') : null,
+      h('div', { class: 'row mt12' }, h('button', { class: 'btn sm', disabled: s.busy, onClick: async () => { const r = await Play.restore(); if (r.status === 'ok') { await License.refresh(true); toast('Đã kiểm tra xong', 'ok'); draw(); } else if (r.status === 'error') toast(r.message, 'error'); } }, 'Khôi phục giao dịch đã mua'), h('button', { class: 'btn sm', onClick: () => Play.manage() }, 'Quản lý gói trên Google Play')),
+      h('div', { class: 'small muted mt8' }, 'Thanh toán và quản lý gói (huỷ, đổi gói) đều qua Google Play — đúng chính sách của Google, ứng dụng không tự xử lý tiền.'));
+  }
+
   function renewCard() {
+    if (Play.enabled()) return playCard();
     if (!Central.isSignedIn()) return null;
     const sel = select(License.PLAN_MONTHS.map(m => [String(m), planLabel(m) + (priceOf(m) ? ' — ' + priceOf(m) : '')]), '6'), note = h('input', { class: 'input', placeholder: 'Ghi chú (vd. nội dung chuyển khoản, tên người chuyển)' });
     const pending = (reqs || []).find(r => r.status === 'pending');
@@ -130,4 +160,8 @@ export function viewPlan(root, ctx) {
   draw();
   if (License.enabled() && Central.isSignedIn() && !loading) { loading = true; (async () => { await License.refresh(); await loadReqs(); await loadAdmin(); loading = false; if (box.isConnected) draw(); })(); }
   mount(root, box);
+  const off = Play.onChange(() => { if (box.isConnected) draw(); });
+  const onVis = () => { if (document.visibilityState === 'visible') Play.onResume(); };
+  document.addEventListener('visibilitychange', onVis);
+  return () => { off(); document.removeEventListener('visibilitychange', onVis); };
 }

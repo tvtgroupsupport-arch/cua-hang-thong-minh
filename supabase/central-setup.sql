@@ -32,10 +32,18 @@ create table if not exists public.subscriptions (
   owner_id    uuid primary key references auth.users (id) on delete cascade,
   plan_months int  not null default 0,
   status      text not null default 'trial' check (status in ('trial', 'active', 'expired')),
+  -- 'manual' = admin duyệt tay sau chuyển khoản (request_renewal / admin_approve_renewal). 'google_play' = xác minh tự động qua Google Play Billing (verify-purchase / rtdn-webhook).
+  source      text not null default 'manual' check (source in ('manual', 'google_play')),
   started_at  timestamptz not null default now(),
   expires_at  timestamptz not null,
   updated_at  timestamptz not null default now()
 );
+-- Chạy lại trên dự án đã có bảng cũ (chưa có các cột này)
+alter table public.subscriptions add column if not exists source text not null default 'manual';
+-- Hạn do ADMIN cộng thêm tay cho tài khoản dùng Google Play: cập nhật từ Google không được làm mất phần này (hạn cuối = lớn hơn giữa ngày Google báo và bonus_until).
+alter table public.subscriptions add column if not exists bonus_until timestamptz;
+alter table public.subscriptions drop constraint if exists subscriptions_source_check;
+alter table public.subscriptions add constraint subscriptions_source_check check (source in ('manual', 'google_play'));
 
 create table if not exists public.store_links (
   owner_id   uuid primary key references auth.users (id) on delete cascade,
@@ -55,6 +63,151 @@ create table if not exists public.renewal_requests (
   decided_by  uuid
 );
 create index if not exists renewal_requests_owner_idx on public.renewal_requests (owner_id, created_at desc);
+
+/* ============================================================
+   GÓI CƯỚC QUA GOOGLE PLAY BILLING
+   Chỉ dùng cho bản app riêng "Google Play" (package name khác bản chuyển khoản).
+   Luồng: app mua gói → Google trả về purchaseToken → app gửi token đó (KHÔNG gửi gì
+   khác, token không phải bí mật nhưng cũng không nên qua tay ai khác ngoài máy chủ
+   của chính bạn) tới Edge Function verify-purchase → Edge Function tự gọi Google Play
+   Developer API (bằng tài khoản dịch vụ, chỉ máy chủ giữ, KHÔNG BAO GIỜ đưa vào app)
+   để XÁC MINH ĐỘC LẬP token đó thật hay giả → mới ghi nhận gói cước.
+   Lý do bắt buộc phải xác minh ở máy chủ: client purchaseToken gửi lên là CHƯA ĐÁNG TIN
+   — ai đó sửa app hoàn toàn có thể tự bịa một token giả nếu không có bước xác minh độc
+   lập này với chính Google.
+   ============================================================ */
+create table if not exists public.play_purchases (
+  purchase_token text primary key,          -- định danh duy nhất Google cấp cho mỗi giao dịch
+  owner_id       uuid not null references auth.users (id) on delete cascade,
+  product_id     text not null,              -- vd. goi_1_thang / goi_6_thang / goi_12_thang
+  plan_months    int  not null,
+  state          text not null default 'active' check (state in ('active', 'canceled', 'expired', 'revoked', 'refunded')),
+  expires_at     timestamptz not null,
+  last_verified  timestamptz not null default now(),
+  raw_notification jsonb,                    -- lưu nguyên văn lần RTDN gần nhất, để tra cứu khi cần
+  created_at     timestamptz not null default now()
+);
+create index if not exists play_purchases_owner_idx on public.play_purchases (owner_id);
+
+-- Mã gói (product ID trên Play Console) → số tháng. Sửa lại đúng mã bạn đặt lúc tạo gói trên Play Console.
+create table if not exists public.play_products (
+  product_id  text primary key,
+  plan_months int not null check (plan_months in (1, 6, 12))
+);
+insert into public.play_products (product_id, plan_months) values
+  ('goi_1_thang', 1), ('goi_6_thang', 6), ('goi_12_thang', 12)
+  on conflict (product_id) do nothing;
+
+alter table public.play_purchases enable row level security;
+alter table public.play_products  enable row level security;
+-- Không có policy nào cho client — chỉ Edge Function (dùng service_role, tự bỏ qua RLS) được ghi/đọc thẳng.
+-- Chủ cửa hàng xem gói của MÌNH qua get_my_subscription() như cũ (đã tự gồm cả nguồn Google Play).
+revoke all on public.play_purchases, public.play_products from anon, authenticated;
+
+/** Edge Function gọi hàm này SAU KHI đã tự xác minh purchaseToken với Google — hàm không tự gọi Google,
+    chỉ ghi nhận kết quả đã xác minh. Chỉ service_role gọi được (không grant cho authenticated/anon). */
+create or replace function public.record_play_purchase(
+  p_owner uuid, p_purchase_token text, p_product_id text,
+  p_expires_at timestamptz, p_state text, p_raw jsonb
+) returns void
+language plpgsql security definer set search_path = public as $$
+declare v_months int; v_best_months int; v_best_expiry timestamptz; v_has_active boolean;
+        v_bonus timestamptz; v_final timestamptz; v_active boolean; v_store timestamptz;
+begin
+  if exists (select 1 from public.denied_trial_tokens where purchase_token = p_purchase_token) then
+    raise exception 'Máy này đã dùng thử miễn phí rồi' using errcode = '42501';
+  end if;
+  select plan_months into v_months from public.play_products where product_id = p_product_id;
+  if v_months is null then raise exception 'Không nhận ra mã gói: %', p_product_id using errcode = '22023'; end if;
+
+  -- Token đã thuộc về người khác → không cho chuyển chủ (chống nhận trộm token).
+  if exists (select 1 from public.play_purchases where purchase_token = p_purchase_token and owner_id <> p_owner) then
+    raise exception 'Token này đã thuộc về tài khoản khác' using errcode = '42501';
+  end if;
+
+  insert into public.play_purchases (purchase_token, owner_id, product_id, plan_months, state, expires_at, last_verified, raw_notification)
+  values (p_purchase_token, p_owner, p_product_id, v_months, p_state, p_expires_at, now(), p_raw)
+  on conflict (purchase_token) do update
+    set state = excluded.state, expires_at = excluded.expires_at, last_verified = now(), raw_notification = excluded.raw_notification;
+
+  -- Gói cước THẬT theo đúng ngày Google báo. Lấy token đang hiệu lực có hạn xa nhất của chủ cửa hàng,
+  -- để token CŨ (đổi gói / đăng ký lại) báo hết hạn không ghi đè gói mới còn hạn.
+  select plan_months, expires_at into v_best_months, v_best_expiry
+    from public.play_purchases
+   where owner_id = p_owner and state = 'active' and expires_at > now()
+   order by expires_at desc limit 1;
+
+  v_has_active := v_best_expiry is not null;
+  if not v_has_active then   -- không còn token nào hiệu lực → phản ánh token vừa ghi (hết hạn)
+    v_best_months := v_months; v_best_expiry := p_expires_at;
+  end if;
+
+  -- Giữ phần admin cộng thêm tay (nếu có): hạn cuối là ngày xa hơn giữa Google và bonus_until.
+  select bonus_until into v_bonus from public.subscriptions where owner_id = p_owner;
+  v_final  := greatest(v_best_expiry, coalesce(v_bonus, v_best_expiry));
+  v_active := v_final > now() and (v_has_active or coalesce(v_bonus > now(), false));
+  -- Không còn quyền lợi (bị thu hồi/hoàn tiền, tạm giữ do thanh toán lỗi, tạm dừng, hết hạn…) thì hạn lưu cho app KHÔNG được ở tương lai:
+  -- app (license.js) tính trạng thái chỉ từ expires_at, nên một gói bị thu hồi mà expires_at còn xa sẽ vẫn hiện "còn hạn".
+  v_store := case when v_active then v_final else least(v_final, now()) end;
+
+  insert into public.subscriptions (owner_id, plan_months, status, source, started_at, expires_at)
+  values (p_owner, v_best_months, case when v_active then 'active' else 'expired' end,
+          'google_play', now(), v_store)
+  on conflict (owner_id) do update
+    set plan_months = v_best_months, source = 'google_play', expires_at = v_store,
+        status = case when v_active then 'active' else 'expired' end,
+        updated_at = now()
+    -- Không cho một token HẾT HẠN ghi đè gói đang còn hiệu lực từ nguồn khác (dùng thử / admin gia hạn tay).
+    where v_active or public.subscriptions.source = 'google_play' or public.subscriptions.expires_at <= now();
+end $$;
+
+/** Edge Function tra owner_id từ purchaseToken khi nhận RTDN (Google chỉ gửi kèm token, không gửi owner_id). */
+create or replace function public.find_play_purchase_owner(p_purchase_token text) returns uuid
+language sql stable security definer set search_path = public as $$
+  select owner_id from public.play_purchases where purchase_token = p_purchase_token;
+$$;
+
+revoke execute on function public.record_play_purchase(uuid, text, text, timestamptz, text, jsonb),
+  public.find_play_purchase_owner(text) from public, anon, authenticated;
+-- Không grant cho ai cả — chỉ service_role (Edge Function) gọi được, service_role luôn có toàn quyền mặc định.
+
+-- ---------- Dùng thử miễn phí của Google Play: chỉ 1 lần cho mỗi máy ----------
+create table if not exists public.trial_devices (
+  device_hash text primary key,
+  owner_id    uuid not null references auth.users (id) on delete cascade,
+  first_seen  timestamptz not null default now()
+);
+alter table public.trial_devices enable row level security;
+revoke all on public.trial_devices from anon, authenticated;
+
+-- Google chỉ cấp ưu đãi dùng thử 1 lần cho mỗi TÀI KHOẢN GOOGLE; người dùng đổi tài khoản Google (hoặc tạo tài khoản mới) trên cùng một máy vẫn lấy lại được.
+-- verify-purchase gọi hàm này khi giao dịch là dùng thử: máy đã dùng thử bằng một giao dịch KHÁC thì từ chối, không ghi nhận và không xác nhận với Google
+-- (giao dịch không xác nhận sau 3 ngày Google tự huỷ). Chỉ lưu mã băm của Android ID.
+alter table public.trial_devices add column if not exists trial_token text;
+create table if not exists public.denied_trial_tokens (
+  purchase_token text primary key,
+  created_at     timestamptz not null default now()
+);
+alter table public.denied_trial_tokens enable row level security;
+revoke all on public.denied_trial_tokens from anon, authenticated;
+
+create or replace function public.claim_trial_use(p_owner uuid, p_device_id text, p_token text) returns text
+language plpgsql security definer set search_path = public as $$
+declare v_hash text; v_tok text;
+begin
+  if exists (select 1 from public.denied_trial_tokens where purchase_token = p_token) then return 'used'; end if;
+  if p_device_id is null or length(btrim(p_device_id)) < 8 then return 'skipped'; end if;
+  v_hash := encode(sha256(convert_to('taphoa:' || btrim(p_device_id), 'UTF8')), 'hex');
+  insert into public.trial_devices (device_hash, owner_id) values (v_hash, p_owner) on conflict do nothing;
+  select trial_token into v_tok from public.trial_devices where device_hash = v_hash for update;
+  if v_tok is not null and v_tok <> p_token then
+    insert into public.denied_trial_tokens (purchase_token) values (p_token) on conflict do nothing;
+    return 'used';
+  end if;
+  update public.trial_devices set trial_token = p_token where device_hash = v_hash and trial_token is null;
+  return 'ok';
+end $$;
+revoke execute on function public.claim_trial_use(uuid, text, text) from public, anon, authenticated;
 
 /* ============================================================
    TỰ TẠO SUPABASE CHO CỬA HÀNG (OAuth + Management API)
@@ -133,6 +286,7 @@ language sql stable security definer set search_path = public as $$
   select jsonb_build_object(
     'plan_months', s.plan_months,
     'status', case when s.expires_at > now() then s.status else 'expired' end,
+    'source', s.source,
     'started_at', s.started_at,
     'expires_at', s.expires_at,
     'server_now', now()
@@ -214,6 +368,10 @@ begin
   values (p_owner, p_months, 'active', now() + make_interval(months => p_months))
   on conflict (owner_id) do update
     set expires_at  = greatest(now(), public.subscriptions.expires_at) + make_interval(months => p_months),
+        -- Tài khoản đang dùng Google Play: ghi nhớ hạn mới làm "bonus" để lần cập nhật từ Google không ghi đè mất.
+        bonus_until = case when public.subscriptions.source = 'google_play'
+                           then greatest(now(), public.subscriptions.expires_at) + make_interval(months => p_months)
+                           else null end,
         plan_months = p_months, status = 'active', updated_at = now();
 end $$;
 

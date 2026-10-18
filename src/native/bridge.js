@@ -11,6 +11,8 @@ import { ScreenBrightness } from '@capacitor-community/screen-brightness';
 import { Haptics } from '@capacitor/haptics';
 import { CapacitorThermalPrinter } from 'capacitor-thermal-printer';
 import { Browser } from '@capacitor/browser';
+import { Device } from '@capacitor/device';
+import { NativePurchases, PURCHASE_TYPE } from '@capgo/native-purchases';
 
 const isNative = Capacitor.isNativePlatform();
 
@@ -119,7 +121,40 @@ const printer = {
 /* ---------- Mở trang web ngoài (hướng dẫn tạo Supabase…) ---------- */
 const openUrl = url => { if (!String(url).toLowerCase().startsWith('https://')) throw new Error('Chỉ mở được địa chỉ https'); return Browser.open({ url }); };
 
+/* ---------- Định danh máy (Android ID) — chỉ để chặn lấy lại dùng thử miễn phí bằng cách cài lại app / tạo tài khoản mới (máy chủ chỉ nhận mã băm) ---------- */
+const device = {
+  async androidId() {
+    if (!isNative) return '';
+    try { return String((await plug(Device.getId(), 4000, 'Device')).identifier || ''); } catch (e) { return ''; }
+  }
+};
+
+/* ---------- Google Play Billing (chỉ dùng ở bản app "Google Play") ----------
+   Không tự quyết định gì về gói cước ở đây — chỉ chuyển tiếp purchaseToken lên Edge Function "verify-purchase" (xem www/js/cloud/play-billing.js)
+   để XÁC MINH VỚI GOOGLE rồi mới ghi nhận. Không bao giờ tin thẳng dữ liệu purchaseProduct() trả về. */
+const billing = {
+  async isSupported() {
+    if (!isNative) return false;
+    try { return (await NativePurchases.isBillingSupported()).isBillingSupported; } catch (e) { return false; }
+  },
+  async getProducts(productIds) {
+    const { products } = await NativePurchases.getProducts({ productIdentifiers: productIds, productType: PURCHASE_TYPE.SUBS });
+    return products;
+  },
+  /** appAccountToken = id tài khoản lưu trữ của chủ cửa hàng — Google đính kèm lại vào giao dịch để máy chủ đối chiếu đúng người mua.
+      planIdentifier = ID base plan trên Play Console (plugin BẮT BUỘC với gói đăng ký trên Android). */
+  async purchase(productId, appAccountToken, planIdentifier) {
+    return NativePurchases.purchaseProduct({ productIdentifier: productId, planIdentifier, productType: PURCHASE_TYPE.SUBS, appAccountToken });
+  },
+  async restore() { return NativePurchases.restorePurchases(); },
+  async getPurchases(appAccountToken) {
+    try { return (await NativePurchases.getPurchases({ productType: PURCHASE_TYPE.SUBS, appAccountToken })).purchases || []; }
+    catch (e) { return []; }
+  },
+  async manage() { try { await NativePurchases.manageSubscriptions(); } catch (e) {} },
+};
+
 /** HTTP native: không bị chặn CORS (dùng gọi Management API của Supabase). */
 const http = async ({ url, method = 'GET', headers = {}, body }) => { const r = await CapacitorHttp.request({ url, method, headers, data: body, responseType: 'json' }); return { status: r.status, data: r.data }; };
 
-window.NativeBridge = { isNative, http, platform: Capacitor.getPlatform(), scan, saveFile, shareText, where, brightness, haptics, app, printer, openUrl };
+window.NativeBridge = { isNative, http, billing, device, platform: Capacitor.getPlatform(), scan, saveFile, shareText, where, brightness, haptics, app, printer, openUrl };

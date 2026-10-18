@@ -4,6 +4,7 @@ import * as E from '../www/js/engine/index.js';
 import * as Sync from '../www/js/sync/engine.js';
 import * as License from '../www/js/license.js';
 import * as Central from '../www/js/cloud/central.js';
+import * as Play from '../www/js/cloud/play-billing.js';
 import { oauthProvision, oauthAvailable } from '../www/js/sync/provision.js';
 import { S, memoryAdapter } from '../www/js/store.js';
 import { setWriteGuard } from '../www/js/engine/auth.js';
@@ -145,7 +146,7 @@ test('khoá mềm: máy phụ chỉ theo hạn của máy chủ cửa hàng (kh�
 });
 
 /* Máy khách ↔ trung tâm thật (Postgres) qua fetch giả đi vào đúng các hàm RPC */
-function fakeCentralFetch() {
+function fakeCentralFetch(uid = U1) {
   const st = { calls: [], users: {}, refreshes: 0, failRefresh: false };
   const tok = (u, exp = 3600) => ({ access_token: 'AT-' + u.id + '-' + (++st.refreshes), refresh_token: 'RT-' + u.id, expires_in: exp, user: { id: u.id, email: u.email } });
   st.fetch = async (url, init) => {
@@ -154,12 +155,12 @@ function fakeCentralFetch() {
     const res = (status, j) => ({ ok: status < 400, status, text: async () => JSON.stringify(j) });
     if ((init.headers || {}).apikey !== CFG.centralAnonKey) return res(401, { message: 'No API key' });
     if (path === '/auth/v1/signup') { if (st.users[body.email]) return res(422, { msg: 'User already registered' }); if (body.password.length < 6) return res(422, { msg: 'Password should be at least 6 characters' });
-      const u = { id: U1, email: body.email, password: body.password }; st.users[body.email] = u; return st.confirm ? res(200, { id: u.id, email: u.email }) : res(200, tok(u)); }
+      const u = { id: uid, email: body.email, password: body.password }; st.users[body.email] = u; return st.confirm ? res(200, { id: u.id, email: u.email }) : res(200, tok(u)); }
     if (path === '/auth/v1/token?grant_type=password') { const u = st.users[body.email]; return u && u.password === body.password ? res(200, tok(u, st.expIn)) : res(400, { error_description: 'Invalid login credentials' }); }
     if (path === '/auth/v1/token?grant_type=refresh_token') { if (st.failRefresh) return res(400, { error_description: 'Invalid Refresh Token' }); const u = Object.values(st.users)[0]; return res(200, tok(u)); }
     if (path.startsWith('/rest/v1/rpc/')) {
       const fn = path.split('/').pop(); if (!(init.headers.Authorization || '').startsWith('Bearer AT-')) return res(401, { message: 'JWT' });
-      try { return res(200, await rpcOn(central, U1)(fn, body || {})); } catch (e) { return res(400, { message: e.message }); }
+      try { return res(200, await rpcOn(central, uid)(fn, body || {})); } catch (e) { return res(400, { message: e.message }); }
     }
     return res(404, { message: 'not found' });
   };
@@ -196,6 +197,140 @@ test('sao lưu không chứa phiên đăng nhập trung tâm / mốc đồng h�
   const dump = JSON.stringify(S.dump());
   ok(!dump.includes('RT-x') && !dump.includes('clockHw') && !dump.includes('trialStart'), 'sao lưu lộ meta cục bộ');
   S.setMeta('central', null);
+});
+
+/* ---------- Google Play: SQL máy chủ (Postgres thật) ---------- */
+const U3 = '33333333-3333-3333-3333-333333333333', U4 = '44444444-4444-4444-4444-444444444444';
+const rec = (db, owner, token, product, expISO, state = 'active') => db.query('select public.record_play_purchase($1::uuid, $2, $3, $4::timestamptz, $5, $6::jsonb)', [owner, token, product, expISO, state, '{}']);
+const subOf = async uid => rpcOn(central, uid)('get_my_subscription');
+
+test('SQL Google Play: ghi nhận giao dịch đã xác minh → gói google_play; không đổi chủ token; mã gói lạ bị từ chối; thu hồi → hết hạn', async () => {
+  await central.exec(`insert into auth.users (id, email) values ('${U3}', 'chu3@x.vn'), ('${U4}', 'chu4@x.vn')`);
+  const exp = new Date(Date.now() + 30 * DAY).toISOString();
+  await rec(central, U3, 'tok-1', 'goi_1_thang', exp);
+  let s = await subOf(U3); eq(s.source, 'google_play'); eq(s.status, 'active'); eq(s.plan_months, 1);
+  ok(Math.abs(Date.parse(s.expires_at) - Date.parse(exp)) < 1000, 'hạn đúng ngày Google báo');
+  await rejects(() => rec(central, U4, 'tok-1', 'goi_1_thang', exp), /thuộc về tài khoản khác/, 'đổi chủ token');
+  await rejects(() => rec(central, U3, 'tok-x', 'goi_99_thang', exp), /Không nhận ra mã gói/, 'mã gói lạ');
+  // gia hạn tự động: cùng token, hạn mới
+  const exp2 = new Date(Date.now() + 60 * DAY).toISOString(); await rec(central, U3, 'tok-1', 'goi_1_thang', exp2);
+  ok(Date.parse((await subOf(U3)).expires_at) > Date.now() + 59 * DAY, 'RTDN gia hạn');
+  // hoàn tiền / thu hồi → không còn quyền lợi, hạn lưu KHÔNG ở tương lai
+  await rec(central, U3, 'tok-1', 'goi_1_thang', exp2, 'revoked');
+  s = await subOf(U3); eq(s.status, 'expired'); ok(Date.parse(s.expires_at) <= Date.now() + 1000, 'hạn không ở tương lai');
+  // token cũ hết hạn không ghi đè gói còn hiệu lực từ token mới
+  await rec(central, U3, 'tok-2', 'goi_6_thang', new Date(Date.now() + 180 * DAY).toISOString());
+  await rec(central, U3, 'tok-1', 'goi_1_thang', new Date(Date.now() - DAY).toISOString(), 'expired');
+  s = await subOf(U3); eq(s.status, 'active'); eq(s.plan_months, 6);
+});
+
+test('SQL Google Play: admin cộng tay không bị cập nhật từ Google ghi đè; dùng thử chỉ 1 lần/máy; hàm chỉ service_role gọi được', async () => {
+  // U4: có gói Google hết hạn, admin cộng 1 tháng → bonus; cập nhật "hết hạn" từ Google không làm mất
+  await central.exec(`update public.subscriptions set expires_at = now() - interval '1 day' where owner_id = '${U4}'`);      // hết dùng thử trước (token hết hạn không được ghi đè dùng thử còn hạn)
+  await rec(central, U4, 'tok-4', 'goi_1_thang', new Date(Date.now() - DAY).toISOString(), 'expired');
+  eq((await subOf(U4)).status, 'expired'); eq((await subOf(U4)).source, 'google_play');
+  await rpcOn(central, ADM)('admin_extend', { p_owner: U4, p_months: 1 });
+  eq((await subOf(U4)).status, 'active');
+  await rec(central, U4, 'tok-4', 'goi_1_thang', new Date(Date.now() - 2 * DAY).toISOString(), 'expired');
+  eq((await subOf(U4)).status, 'active', 'phần admin cộng còn nguyên');
+  // dùng thử 1 lần mỗi máy
+  const q = async (owner, dev, tok) => (await central.query('select public.claim_trial_use($1::uuid, $2, $3) as r', [owner, dev, tok])).rows[0].r;
+  eq(await q(U3, 'android-id-12345', 'trial-1'), 'ok'); eq(await q(U3, 'android-id-12345', 'trial-1'), 'ok', 'cùng token gọi lại');
+  eq(await q(U4, 'android-id-12345', 'trial-2'), 'used', 'máy đã dùng thử bằng giao dịch khác');
+  eq(await q(U4, 'abc', 'trial-3'), 'skipped', 'thiếu mã máy');
+  await rejects(() => rec(central, U4, 'trial-2', 'goi_1_thang', new Date(Date.now() + 14 * DAY).toISOString()), /đã dùng thử/, 'token dùng thử bị từ chối');
+  // quyền: client không được gọi các hàm ghi nhận
+  await rejects(() => as(central, U3, () => central.query("select public.record_play_purchase('" + U3 + "', 't', 'goi_1_thang', now(), 'active', '{}')")), /permission denied/i, 'authenticated gọi record_play_purchase');
+  await central.exec('set role anon');
+  await rejects(() => central.query("select public.claim_trial_use('" + U3 + "', 'android-id-99999', 'x')"), /permission denied/i, 'anon gọi claim_trial_use');
+  await central.exec('reset role');
+  await rejects(() => as(central, U3, () => central.query('select * from public.play_purchases')), /permission denied/i, 'đọc play_purchases');
+});
+
+/* ---------- Google Play: phía app ---------- */
+const labelFor = id => ({ goi_1_thang: 'Gói 1 tháng', goi_6_thang: 'Gói 6 tháng', goi_12_thang: 'Gói 12 tháng' }[id] || id);
+const row = (id, o = {}) => Object.assign({ identifier: id.replace(/_/g, '-'), planIdentifier: id, offerId: null, priceString: '₫99.000', title: labelFor(id) }, o);
+const trialRow = id => row(id, { offerId: 'free-trial', pricingPhases: [{ price: 0, billingPeriod: 'P14D', priceString: 'Miễn phí' }, { price: 99000, billingPeriod: 'P1M', priceString: '₫99.000' }] });
+
+test('Google Play (app): chu kỳ ISO → tiếng Việt; chuẩn hoá gói + dùng thử; plugin chưa vá thì KHÔNG đoán dùng thử', async () => {
+  eq(Play.periodVi('P14D'), '14 ngày'); eq(Play.periodVi('P2W'), '14 ngày'); eq(Play.periodVi('P1M'), '1 tháng'); eq(Play.periodVi('P1Y'), '1 năm'); eq(Play.periodVi('P1M2W'), '1 tháng 14 ngày'); eq(Play.periodVi('xyz'), ''); eq(Play.periodVi('P0D'), '');
+  const list = Play.normalizeProducts([row('goi_12_thang'), trialRow('goi_1_thang'), row('goi_1_thang'), row('goi_6_thang'), row('khong_ro')]);
+  eq(list.map(Play.productIdOf), ['goi_1_thang', 'goi_6_thang', 'goi_12_thang'], 'thứ tự 1→6→12, bỏ gói lạ');
+  eq(list[0].offerId, null, 'giữ dòng giá gốc'); eq(list[0].trial, { period: 'P14D', thenPrice: '₫99.000' }); eq(Play.trialLabel(list[0].trial), 'Dùng thử miễn phí 14 ngày'); eq(list[1].trial, undefined);
+  const unpatched = Play.normalizeProducts([row('goi_1_thang'), row('goi_1_thang', { offerId: 'free-trial' })]);
+  eq(unpatched[0].trial, undefined, 'không có pricingPhases → không hiện dùng thử');
+  eq(Play.trialOf(row('goi_1_thang', { offerId: 'x', pricingPhases: [{ price: 99000, billingPeriod: 'P1M' }] }), null), null, 'giai đoạn đầu có giá → không phải dùng thử');
+});
+
+function fakePlay({ products, owned = [] } = {}) {
+  const b = { calls: [], owned: owned.slice(), buyResult: null, buyDelay: null };
+  Object.assign(b, {
+    isSupported: async () => true, getProducts: async () => products, getPurchases: async () => b.owned.slice(), restore: async () => { b.calls.push('restore'); }, manage: async () => { b.calls.push('manage'); },
+    purchase: async (id, acct, plan) => { b.calls.push(['purchase', id, acct, plan]); if (b.buyDelay) return b.buyDelay; if (b.buyResult instanceof Error) throw b.buyResult; const tx = { purchaseToken: 'real-' + id + '-' + b.calls.length, productIdentifier: id, purchaseState: '1' }; b.owned.push(tx); return tx; },
+  });
+  return b;
+}
+/* máy chủ verify-purchase giả: nhận token, gọi record_play_purchase trên Postgres thật — đúng như Edge Function thật sau khi hỏi Google */
+function playServerFetch(uid) {
+  const f = fakeCentralFetch(uid); f.verifyCalls = [];
+  const inner = f.fetch;
+  f.fetch = async (url, init) => {
+    const path = url.replace(CFG.centralUrl, '');
+    if (path === '/functions/v1/verify-purchase') {
+      const body = JSON.parse(init.body); f.verifyCalls.push(body);
+      const res = (status, j) => ({ ok: status < 400, status, text: async () => JSON.stringify(j) });
+      if (!(init.headers.Authorization || '').startsWith('Bearer AT-')) return res(401, { error: 'Chưa đăng nhập' });
+      if (!/^real-goi_\d+_thang/.test(body.purchaseToken)) return res(502, { error: 'Không xác minh được với Google' });
+      if (f.trialDevices && body.purchaseToken.includes('trial')) { const c = (await central.query('select public.claim_trial_use($1::uuid,$2,$3) as r', [uid, body.deviceId, body.purchaseToken])).rows[0].r; if (c === 'used') return res(409, { error: 'Máy này đã dùng thử miễn phí rồi', code: 'TRIAL_USED' }); }
+      if (f.pending) return res(202, { error: 'Giao dịch đang chờ thanh toán', pending: true });
+      const months = Number(/goi_(\d+)_thang/.exec(body.productId)[1]); const exp = new Date(Date.now() + months * 30 * DAY).toISOString();
+      await rec(central, uid, body.purchaseToken, body.productId, exp);
+      return res(200, { ok: true, state: 'SUBSCRIPTION_STATE_ACTIVE', expires_at: exp });
+    }
+    return inner(url, init);
+  };
+  return f;
+}
+
+test('Google Play (app): mua gói → gửi token lên máy chủ xác minh → hạn gói cập nhật; huỷ, chờ thanh toán, mua trùng, đang có gói khác, dùng thử đã dùng', async () => {
+  const U5 = '55555555-5555-5555-5555-555555555555';
+  await central.exec(`insert into auth.users (id, email) values ('${U5}', 'chu5@x.vn')`);
+  Central.setConfig(Object.assign({}, CFG, { billingMode: 'play' })); await freshStore(); License.init();
+  const f = playServerFetch(U5); Central.setFetch(f.fetch);
+  await Central.signUp({ email: 'p@x.vn', password: '123456' });
+  eq(Play.enabled(), true);
+  const billing = fakePlay({ products: [trialRow('goi_1_thang'), row('goi_1_thang'), row('goi_6_thang'), row('goi_12_thang')] });
+  Play.setDeps({ billing, deviceId: 'android-id-777777', retryMs: 5 });
+  await Play.loadProducts(); eq(Play.state().products.length, 3); ok(Play.state().products[0].trial, 'hiện dùng thử gói 1 tháng');
+  // 1) mua gói 6 tháng thành công
+  let r = await Play.purchase('goi_6_thang'); eq(r.status, 'ok');
+  eq(billing.calls.find(c => c[0] === 'purchase').slice(1), ['goi_6_thang', U5, 'goi-6-thang'], 'truyền id tài khoản + base plan');
+  eq(f.verifyCalls[0].deviceId, 'android-id-777777'); ok(f.verifyCalls[0].purchaseToken.startsWith('real-goi_6_thang'));
+  await License.refresh(true); eq(License.status().plan, 6); ok(License.status().daysLeft > 170, 'hạn ≈ 6 tháng'); eq(License.status().locked, false);
+  // 2) mua lại đúng gói đang có → không thu thêm tiền
+  const callsBefore = billing.calls.filter(c => c[0] === 'purchase').length;
+  r = await Play.purchase('goi_6_thang'); eq(r.status, 'already'); eq(billing.calls.filter(c => c[0] === 'purchase').length, callsBefore, 'không gọi Google mua nữa');
+  // 3) đang có gói 6 tháng, mua gói 12 tháng → hỏi lại (tính tiền cả hai)
+  r = await Play.purchase('goi_12_thang'); eq(r.status, 'other'); eq(r.have, ['6 tháng']);
+  // 4) người dùng huỷ hộp thoại mua
+  billing.owned = []; billing.buyResult = new Error('User cancelled the purchase'); r = await Play.purchase('goi_1_thang'); eq(r.status, 'cancelled'); billing.buyResult = null;
+  // 5) hộp thoại bị đóng mà plugin không trả lời → onResume coi là huỷ, nút không bị khoá mãi
+  billing.buyDelay = new Promise(() => {}); const p5 = Play.purchase('goi_1_thang'); await new Promise(x => setTimeout(x, 20)); Play.onResume(10); r = await p5; eq(r.status, 'cancelled'); eq(Play.state().busy, false); billing.buyDelay = null;
+  // 6) Google xác nhận trễ (chờ thanh toán)
+  f.pending = true; r = await Play.purchase('goi_12_thang', { force: true }); eq(r.status, 'pending'); f.pending = false;
+  // 7) ưu đãi dùng thử không còn với tài khoản Google này → dừng, không để bị tính giá gốc
+  billing.owned = []; await Play.loadProducts(true); ok(Play.state().products[0].trial);
+  billing.getProducts = async () => [row('goi_1_thang'), row('goi_6_thang'), row('goi_12_thang')];
+  r = await Play.purchase('goi_1_thang'); eq(r.status, 'trial-gone');
+  // 8) máy đã dùng thử → máy chủ trả TRIAL_USED
+  f.trialDevices = true; await central.query("select public.claim_trial_use($1::uuid, 'android-id-777777', 'trial-other')", [U4]);
+  billing.getProducts = async () => [trialRow('goi_1_thang'), row('goi_1_thang')]; await Play.loadProducts(true);
+  billing.purchase = async (id) => ({ purchaseToken: 'real-goi_1_thang-trial', productIdentifier: id }); billing.owned = [];
+  r = await Play.purchase('goi_1_thang'); eq(r.status, 'trial-used'); ok(/dùng thử/.test(r.message));
+  // 9) khôi phục giao dịch: gửi mọi lượt mua đang có lên máy chủ
+  f.trialDevices = false; f.verifyCalls.length = 0; billing.owned = [{ purchaseToken: 'real-goi_6_thang-old', productIdentifier: 'goi_6_thang', purchaseState: '1' }, { purchaseToken: 'x', productIdentifier: 'khong_ro', purchaseState: '1' }, { purchaseToken: 'y', productIdentifier: 'goi_1_thang', purchaseState: '0' }];
+  eq((await Play.restore()).status, 'ok'); eq(f.verifyCalls.length, 1, 'chỉ gửi lượt mua hợp lệ (đúng mã gói, đã thanh toán)');
+  Play.setDeps(null); Central.setFetch(null);
 });
 
 test('tự tạo Supabase qua OAuth: start → chờ Authorize → các bước → done → liên kết & đẩy dữ liệu; bấm lại không tạo trùng', async () => {
