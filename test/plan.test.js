@@ -5,7 +5,7 @@ import * as Sync from '../www/js/sync/engine.js';
 import * as License from '../www/js/license.js';
 import * as Central from '../www/js/cloud/central.js';
 import * as Play from '../www/js/cloud/play-billing.js';
-import { oauthProvision, oauthAvailable } from '../www/js/sync/provision.js';
+import { oauthProvision, oauthAvailable, resetOauthProbe } from '../www/js/sync/provision.js';
 import { S, memoryAdapter } from '../www/js/store.js';
 import { setWriteGuard } from '../www/js/engine/auth.js';
 
@@ -359,6 +359,15 @@ test('tự tạo Supabase qua OAuth: start → chờ Authorize → các bước 
   await Sync.disconnect();
   // lỗi từ máy chủ → ném lỗi tiếng Việt, không vòng lặp vô hạn
   await rejects(() => oauthProvision({ deps: { callFn: async name => name === 'provision-start' ? { resume: true } : { state: 'error', message: 'Tài khoản Supabase của bạn đã đủ số dự án miễn phí.' }, sleep: async () => {}, waitMs: 0, workMs: 0 } }), /đủ số dự án/);
+  // hàm provision-* chưa deploy: gateway trả 404 không CORS → "Failed to fetch" → app phải nói rõ nguyên nhân và tắt cách này (không báo nhầm "kiểm tra mạng")
+  resetOauthProbe(); Central.setFetch(null); S.setMeta('central', { access: 'a', refresh: 'r', exp: Date.now() + 1e7, uid: 'u', email: 'e@x.vn' });
+  ok(oauthAvailable(), 'đã đăng nhập tài khoản lưu trữ → cách OAuth khả dụng');
+  const netErr = Object.assign(new Error('Không kết nối được máy chủ gói cước — kiểm tra mạng'), { code: 'net' });
+  await rejects(() => oauthProvision({ deps: { callFn: async () => { throw netErr; }, reachable: async () => true, sleep: async () => {} } }), /chưa bật chức năng tạo kho tự động/, 'hàm chưa deploy');
+  ok(!oauthAvailable(), 'đã tắt cách OAuth trong phiên');
+  resetOauthProbe(); ok(oauthAvailable());
+  await rejects(() => oauthProvision({ deps: { callFn: async () => { throw netErr; }, reachable: async () => false, sleep: async () => {} } }), /kiểm tra mạng/, 'thật sự mất mạng thì giữ nguyên thông báo mạng');
+  ok(oauthAvailable(), 'mất mạng thật không tắt cách OAuth'); S.setMeta('central', null);
   // quá hạn chờ
   await rejects(() => oauthProvision({ deps: { callFn: async name => name === 'provision-start' ? { resume: true } : { state: 'creating', step: 4, total: 8 }, sleep: async () => {}, waitMs: 0, workMs: 0, maxMs: 30 } }), /Quá thời gian/);
   Sync.setTransportFactory(null);

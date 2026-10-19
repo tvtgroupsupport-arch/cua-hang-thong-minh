@@ -151,14 +151,30 @@ export async function autoConnect({ token, orgSlug, onProgress = () => {}, deps 
    Chủ cửa hàng chỉ cần bấm "Authorize" MỘT lần trên trang Supabase; token uỷ quyền chỉ nằm trên máy chủ trung tâm và bị xoá khi xong (app không bao giờ cầm token).
    Luồng: provision-start (gửi kèm script SQL) → mở authorize_url → vòng lặp gọi provision-step tới khi 'done' → connectOwner.
    ===================================================================================================== */
-export const oauthAvailable = () => Central.configured() && Central.isSignedIn();
+/** Máy chủ gói cước chưa deploy hàm provision-* (hoặc chưa đặt OAuth App): phát hiện lúc chạy thì tắt cách này trong phiên hiện tại để người dùng không bấm lại vô ích. */
+let oauthOff = false;
+export const resetOauthProbe = () => { oauthOff = false; };
+export const oauthAvailable = () => Central.configured() && Central.isSignedIn() && !oauthOff;
+/** Máy chủ trung tâm có trả lời được không (đường /auth/v1/settings luôn có CORS)? Dùng để phân biệt "mất mạng" với "hàm chưa được deploy" (hàm không tồn tại trả 404 không kèm CORS → trình duyệt báo "Failed to fetch"). */
+async function centralReachable(deps) {
+  if (deps && deps.reachable) return deps.reachable();
+  try { const c = Central.cfg(); const r = await fetch(c.centralUrl + '/auth/v1/settings', { headers: { apikey: c.centralAnonKey } }); return r.ok || r.status < 500; } catch (e) { return false; }
+}
 
 export async function oauthProvision({ onProgress = () => {}, openUrl, deps = {} } = {}) {
   const call = deps.callFn || Central.callFn, sleep = deps.sleep || sleepReal, wait = deps.waitMs == null ? 3000 : deps.waitMs, work = deps.workMs == null ? 5000 : deps.workMs;
   const maxMs = deps.maxMs || 15 * 60 * 1000;
   if (!deps.callFn && !Central.isSignedIn()) throw new ProvisionError('Đăng nhập tài khoản lưu trữ (Thêm → Gói cước & tài khoản) trước', 'noauth');
   onProgress(1, 8, 'Chuẩn bị');
-  const s = await call('provision-start', { sql: sqlScript() });
+  let s;
+  try { s = await call('provision-start', { sql: sqlScript() }); }
+  catch (e) {
+    if (e && e.code === 'net' && await centralReachable(deps)) {
+      oauthOff = true;
+      throw new ProvisionError('Máy chủ gói cước chưa bật chức năng tạo kho tự động (chưa triển khai hàm provision-start / chưa tạo OAuth App — xem HUONG-DAN-TU-DONG-SUPABASE.md mục C). Hãy dùng cách "mã truy cập cá nhân" hoặc làm thủ công 3 bước ở màn Đồng bộ.', 'nofn');
+    }
+    throw e;
+  }
   if (s.authorize_url) {
     onProgress(1, 8, 'Chờ bạn bấm "Authorize" trên trang Supabase');
     if (openUrl) await openUrl(s.authorize_url);
