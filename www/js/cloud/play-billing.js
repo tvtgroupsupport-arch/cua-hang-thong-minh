@@ -154,6 +154,8 @@ export function onResume(graceMs) {
   p.armed = true;
   setTimeout(() => { if (st.pending === p) p.reject(new Error('user cancelled')); }, graceMs == null ? RESUME_GRACE : graceMs);
 }
+/** Lối thoát thủ công: hộp thoại mua đã đóng nhưng nút vẫn bị khoá (plugin không trả lời) → coi như đã huỷ để mua lại được. */
+export function cancelPending() { const p = st.pending; if (p) p.reject(new Error('user cancelled')); }
 function purchaseWithEscape(productId, ownerId, basePlan) {
   return new Promise((resolve, reject) => {
     st.pending = { reject, armed: false };

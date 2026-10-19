@@ -176,6 +176,12 @@ export function resizeImage(file, max = 240) {
 export const boostBrightness = () => { try { if (nb()) nb().brightness.boost(); } catch (e) {} };
 export const restoreBrightness = () => { try { if (nb()) nb().brightness.restore(); } catch (e) {} };
 /** Nút Back của Android: handler trả true nếu đã xử lý, false → thu nhỏ app. */
+/** Gọi khi app quay lại phía trước (đóng hộp thoại của hệ thống như Google Play). Trong vỏ Android WebView KHÔNG chắc phát visibilitychange khi một Activity khác che lên, nên dùng cả sự kiện 'resume' của Capacitor lẫn visibilitychange. */
+export function onResume(fn) {
+  try { if (nb() && nb().app && nb().app.onResume) nb().app.onResume(fn); } catch (e) { /* không có cầu nối native */ }
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) fn(); });
+}
+
 export function onBack(handler) { try { if (nb()) nb().app.onBack(handler); } catch (e) {} }
 /** Quét máy in Bluetooth gần đó. onFound(danh sách [{name,address}]). */
 export async function scanPrinters(onFound) {

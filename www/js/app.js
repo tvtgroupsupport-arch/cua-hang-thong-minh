@@ -3,7 +3,7 @@ import { S, idbAdapter, memoryAdapter } from './store.js';
 import * as E from './engine/index.js';
 import { h, icon, mount, toast, debounce, installSwipe, installAutoCenter } from './ui.js';
 import { applyTheme, lsGet, lsSet } from './theme.js';
-import { loadNativeBridge, onBack, isNative } from './native.js';
+import { loadNativeBridge, onBack, onResume, isNative } from './native.js';
 import { viewLogin } from './views/login.js';
 import { viewPos } from './views/pos.js';
 import { viewSales } from './views/sales.js';
@@ -20,6 +20,7 @@ import { viewSync } from './views/sync.js';
 import * as Sync from './sync/engine.js';
 import * as License from './license.js';
 import * as Central from './cloud/central.js';
+import * as PlayBilling from './cloud/play-billing.js';
 import { viewPlan } from './views/plan.js';
 import { viewPlanAdmin } from './views/planadmin.js';
 
@@ -175,6 +176,7 @@ async function boot() {
   Sync.onStatus(updateSyncBtn); Sync.onDataChanged(debounce(refreshView, 400));
   if (Sync.isEnabled()) Sync.start();
   License.init(); refreshLicense();
+  onResume(() => { PlayBilling.onResume(); });      // đóng hộp thoại mua của Google mà không trả lời → nút mua không bị khoá mãi
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') refreshLicense(); });
   installSwipe(); installAutoCenter();
   window.__app = { S, E, go };

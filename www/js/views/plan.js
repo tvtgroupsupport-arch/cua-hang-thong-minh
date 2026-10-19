@@ -130,6 +130,7 @@ export function viewPlan(root, ctx) {
         h('div', { class: 'grow' }, h('div', { class: 'ttl' }, Play.labelOf(id)), h('div', { class: 'sub' }, p.title || ''), tr ? h('div', { class: 'small', style: { color: 'var(--ok)', fontWeight: 700 } }, Play.trialLabel(tr) + ' · sau đó ' + (tr.thenPrice || p.priceString || '') + '/' + Play.labelOf(id)) : null),
         tr ? badge('Dùng thử miễn phí', 'green') : h('div', { class: 'bold' }, p.priceString || '')); })),
       prods.some(p => p.trial) ? h('div', { class: 'banner amber small mt8' }, 'Dùng thử miễn phí: Google chưa tính tiền trong thời gian dùng thử. Hãy huỷ gói trong Google Play trước khi hết dùng thử nếu không muốn bị tính tiền.') : null,
+      s.busy ? h('div', { class: 'banner amber small mt8' }, 'Đang chờ Google Play… Nếu đã đóng hộp thoại mua mà nút vẫn mờ, ', h('a', { href: '#', onClick: e => { e.preventDefault(); Play.cancelPending(); } }, h('b', null, 'bấm vào đây để mở khoá'))) : null,
       h('div', { class: 'row mt12' }, h('button', { class: 'btn sm', disabled: s.busy, onClick: async () => { const r = await Play.restore(); if (r.status === 'ok') { await License.refresh(true); toast('Đã kiểm tra xong', 'ok'); draw(); } else if (r.status === 'error') toast(r.message, 'error'); } }, 'Khôi phục giao dịch đã mua'), h('button', { class: 'btn sm', onClick: () => Play.manage() }, 'Quản lý gói trên Google Play')),
       h('div', { class: 'small muted mt8' }, 'Thanh toán và quản lý gói (huỷ, đổi gói) đều qua Google Play — đúng chính sách của Google, ứng dụng không tự xử lý tiền.'));
   }

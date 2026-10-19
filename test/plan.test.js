@@ -316,6 +316,8 @@ test('Google Play (app): mua gói → gửi token lên máy chủ xác minh → 
   billing.owned = []; billing.buyResult = new Error('User cancelled the purchase'); r = await Play.purchase('goi_1_thang'); eq(r.status, 'cancelled'); billing.buyResult = null;
   // 5) hộp thoại bị đóng mà plugin không trả lời → onResume coi là huỷ, nút không bị khoá mãi
   billing.buyDelay = new Promise(() => {}); const p5 = Play.purchase('goi_1_thang'); await new Promise(x => setTimeout(x, 20)); Play.onResume(10); r = await p5; eq(r.status, 'cancelled'); eq(Play.state().busy, false); billing.buyDelay = null;
+  // 5b) lối thoát thủ công (nút "bấm để mở khoá") khi không nhận được sự kiện quay lại app
+  billing.buyDelay = new Promise(() => {}); const p5b = Play.purchase('goi_1_thang'); await new Promise(x => setTimeout(x, 20)); eq(Play.state().busy, true); Play.cancelPending(); r = await p5b; eq(r.status, 'cancelled'); eq(Play.state().busy, false); billing.buyDelay = null;
   // 6) Google xác nhận trễ (chờ thanh toán)
   f.pending = true; r = await Play.purchase('goi_12_thang', { force: true }); eq(r.status, 'pending'); f.pending = false;
   // 7) ưu đãi dùng thử không còn với tài khoản Google này → dừng, không để bị tính giá gốc
