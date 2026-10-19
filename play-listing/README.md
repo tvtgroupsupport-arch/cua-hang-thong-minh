@@ -1,4 +1,4 @@
-# Bộ hồ sơ đưa app Tạp Hóa lên Google Play
+# Bộ hồ sơ đưa app BEPO - Quản lý cửa hàng lên Google Play
 
 Thư mục này gom mọi thứ cần có để điền Play Console (làm theo mẫu của app BEPO). Làm theo thứ tự dưới đây.
 

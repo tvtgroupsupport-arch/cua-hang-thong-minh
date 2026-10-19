@@ -7,19 +7,19 @@ Giới hạn ký tự của Google: tên 30 · mô tả ngắn 80 · mô tả đ
 
 ### Tên ứng dụng (≤ 30)
 ```
-Tạp Hóa - Quản lý cửa hàng
+BEPO - Quản lý cửa hàng
 ```
-_(26 ký tự)_
+_(23 ký tự)_
 
 ### Mô tả ngắn (≤ 80)
 ```
-Bán hàng, kho, công nợ, báo cáo cho tạp hóa — dùng được cả khi mất mạng
+Bán hàng, kho, công nợ, báo cáo cho cửa hàng — dùng được cả khi mất mạng
 ```
-_(70 ký tự)_
+_(72 ký tự)_
 
 ### Mô tả đầy đủ (≤ 4000)
 ```
-Tạp Hóa là ứng dụng quản lý bán hàng trọn bộ cho cửa hàng tạp hóa, siêu thị mini, quán tạp phẩm: bán hàng, quét mã vạch, kho hàng, công nợ, sổ quỹ và báo cáo — ngay trên điện thoại, không cần máy POS đắt tiền.
+BEPO là ứng dụng quản lý bán hàng trọn bộ cho cửa hàng bán lẻ — tạp hóa, siêu thị mini, cửa hàng mỹ phẩm, văn phòng phẩm, vật liệu, đồ gia dụng…: bán hàng, quét mã vạch, kho hàng, công nợ, sổ quỹ và báo cáo — ngay trên điện thoại, không cần máy POS đắt tiền.
 
 ★ HOẠT ĐỘNG CẢ KHI MẤT MẠNG
 Dữ liệu lưu ngay trên điện thoại. Mất Internet vẫn bán hàng, thu tiền, nhập kho bình thường. Cần dùng chung nhiều máy? Bật đồng bộ qua kho dữ liệu riêng của bạn, có mạng là các máy tự cập nhật cho nhau.
@@ -82,16 +82,16 @@ Cần hỗ trợ? Liên hệ: tvtgroup.support@gmail.com
 
 ## Tiếng Anh (en-US) — nên thêm để người duyệt của Google đọc được
 
-**App name (≤ 30):** `Tạp Hóa - Quản lý cửa hàng`
+**App name (≤ 30):** `BEPO - Quản lý cửa hàng`
 
 **Short description (≤ 80):**
 ```
-POS, stock, debts and reports for grocery stores — works offline
+POS, stock, debts and reports for retail stores — works offline
 ```
 
 **Full description:**
 ```
-Tạp Hóa is an all-in-one point-of-sale and inventory app for grocery and convenience stores in Vietnam: selling, barcode scanning, stock, customer/supplier debts, cash book and reports — on your phone, no expensive POS needed.
+BEPO is an all-in-one point-of-sale and inventory app for retail shops in Vietnam (grocery, mini-mart, cosmetics, stationery, hardware and more): selling, barcode scanning, stock, customer/supplier debts, cash book and reports — on your phone, no expensive POS needed.
 
 • Works offline — data is stored on the device. Optional multi-device sync through your own Supabase project
 • Fast checkout: camera or Bluetooth barcode scanning, search without accents, cart with per-line and order discounts, hold orders
@@ -120,7 +120,7 @@ First release on Google Play: offline POS, barcode scanning, stock, debts, Excel
 |---|---|
 | Ứng dụng hay trò chơi | **Ứng dụng** |
 | Danh mục | **Kinh doanh** (Business) |
-| Thẻ (tối đa 5) | Bán hàng · Quản lý kho · Thu ngân · Quản lý cửa hàng · Kinh doanh nhỏ |
+| Thẻ (tối đa 5) | Bán hàng · Quản lý kho · Thu ngân · Quản lý cửa hàng · Bán lẻ |
 | Miễn phí hay trả phí | **Miễn phí** (có gói đăng ký trong ứng dụng) |
 | Email liên hệ | `tvtgroup.support@gmail.com` _(kiểm tra lại)_ |
 | Trang web | `https://tvtgroupsupport-arch.github.io/cua-hang-thong-minh/` _(sau khi bật GitHub Pages)_ |
