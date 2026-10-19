@@ -1,0 +1,36 @@
+name: Đăng trang chính sách bảo mật lên GitHub Pages
+
+# Đăng thư mục docs/ (chính sách bảo mật, hướng dẫn xoá tài khoản) để điền địa chỉ web vào Google Play Console.
+# Cần bật một lần: repo → Settings → Pages → Build and deployment → Source: "GitHub Actions".
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - '.github/workflows/pages.yml'
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Chép biểu tượng vào trang
+        run: cp www/icon.svg docs/icon.svg
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: docs }
+      - id: deployment
+        uses: actions/deploy-pages@v4

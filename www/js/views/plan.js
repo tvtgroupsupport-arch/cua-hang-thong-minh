@@ -2,7 +2,7 @@
 import * as E from '../engine/index.js';
 import * as Central from '../cloud/central.js';
 import * as License from '../license.js';
-import { h, mount, toast, guard, confirmBox, field, select, badge } from '../ui.js';
+import { h, mount, toast, guard, confirmBox, promptBox, field, select, badge } from '../ui.js';
 import { fmtDateTime, fmtMoney } from '../util.js';
 import { copyText } from '../native.js';
 import * as Play from '../cloud/play-billing.js';
@@ -81,7 +81,8 @@ export function viewPlan(root, ctx) {
 
   function accountCard() {
     if (Central.isSignedIn()) return h('div', { class: 'card mt12' }, h('div', { class: 'row' }, h('div', { class: 'grow' }, h('div', { class: 'bold' }, 'Tài khoản lưu trữ'), h('div', { class: 'small muted' }, Central.accountEmail())),
-      h('button', { class: 'btn sm', onClick: async () => { if (!(await confirmBox('Đăng xuất tài khoản lưu trữ khỏi máy này? (Dữ liệu cửa hàng không mất.)', { okText: 'Đăng xuất' }))) return; Central.signOut(); reqs = null; isAdmin = false; draw(); } }, 'Đăng xuất')));
+      h('button', { class: 'btn sm', onClick: async () => { if (!(await confirmBox('Đăng xuất tài khoản lưu trữ khỏi máy này? (Dữ liệu cửa hàng không mất.)', { okText: 'Đăng xuất' }))) return; Central.signOut(); reqs = null; isAdmin = false; draw(); } }, 'Đăng xuất')),
+      h('div', { class: 'small muted mt8' }, 'Muốn xoá hẳn tài khoản lưu trữ (email, hồ sơ, gói cước, địa chỉ kho trên máy chủ)? ', h('a', { href: '#', onClick: e => { e.preventDefault(); deleteAccount(); } }, h('b', null, 'Xoá tài khoản'))));
     const email = h('input', { class: 'input', type: 'email', autocapitalize: 'none', autocomplete: 'username', placeholder: 'email@vidu.com' });
     const pass = h('input', { class: 'input', type: 'password', autocomplete: mode === 'signup' ? 'new-password' : 'current-password', placeholder: 'Mật khẩu (tối thiểu 6 ký tự)' });
     const shop = h('input', { class: 'input', value: E.settings().store.name || '', placeholder: 'Tên cửa hàng' });
@@ -102,6 +103,19 @@ export function viewPlan(root, ctx) {
       h('div', { class: 'seg mb8' }, [['signup', 'Đăng ký mới'], ['login', 'Đã có tài khoản']].map(([k, l]) => h('button', { class: mode === k ? 'on' : '', onClick: () => { mode = k; draw(); } }, l))),
       field('Email', email), field('Mật khẩu', pass), mode === 'signup' ? field('Tên cửa hàng', shop) : null,
       h('button', { class: 'btn primary block', onClick: go }, mode === 'signup' ? 'Tạo tài khoản' : 'Đăng nhập'));
+  }
+
+  /** Xoá tài khoản lưu trữ trên máy chủ trung tâm (Google Play bắt buộc có chức năng này trong app). KHÔNG đụng tới dữ liệu bán hàng trên máy này hay trong Supabase riêng của cửa hàng. */
+  async function deleteAccount() {
+    if (!canManage) return toast('Chỉ chủ cửa hàng mới xoá được tài khoản', 'error');
+    const email = Central.accountEmail();
+    if (!(await confirmBox('Xoá tài khoản lưu trữ ' + email + '? Hồ sơ, gói cước và địa chỉ kho trên máy chủ sẽ bị xoá và KHÔNG khôi phục được. Dữ liệu bán hàng trên máy này và trong Supabase riêng của cửa hàng KHÔNG bị xoá. Gói đăng ký Google Play (nếu có) không tự huỷ — hãy huỷ trong Google Play trước để khỏi bị tính tiền.', { danger: true, okText: 'Xoá tài khoản' }))) return;
+    const typed = await promptBox({ title: 'Xác nhận xoá tài khoản', label: 'Gõ lại email ' + email + ' để xác nhận', okText: 'Xoá' });
+    if (typed == null) return;
+    if (String(typed).trim().toLowerCase() !== String(email).toLowerCase()) return toast('Email không khớp — chưa xoá', 'error');
+    const ok = await guard(async () => { await Central.rpc('delete_my_account'); return true; });
+    if (!ok) return;
+    Central.signOut(); reqs = null; isAdmin = false; toast('Đã xoá tài khoản lưu trữ', 'ok', 5000); draw();
   }
 
   async function loadReqs() { if (!Central.isSignedIn()) return; try { reqs = await Central.rpc('get_my_requests'); } catch (e) { reqs = reqs || []; } }

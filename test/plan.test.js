@@ -92,6 +92,19 @@ test('SQL trung tâm: lưu địa chỉ kho hợp lệ, chặn địa chỉ lạ
   await u2('clear_store_link'); eq(await u2('get_store_link'), null);
 });
 
+test('SQL trung tâm: chủ tự xoá tài khoản (xoá sạch hồ sơ/gói/yêu cầu/liên kết); admin không tự xoá được', async () => {
+  const U9 = '99999999-0000-0000-0000-000000000009';
+  await central.exec(`insert into auth.users (id, email) values ('${U9}', 'xoa@x.vn')`);
+  await rpcOn(central, U9)('request_renewal', { p_months: 1, p_note: 'x' });
+  await rpcOn(central, U9)('save_store_link', { p_url: 'https://abc.supabase.co', p_anon: 'a'.repeat(30) });
+  const cnt = async () => Number((await central.query(`select (select count(*) from public.profiles where id='${U9}') + (select count(*) from public.subscriptions where owner_id='${U9}') + (select count(*) from public.renewal_requests where owner_id='${U9}') + (select count(*) from public.store_links where owner_id='${U9}') as n`)).rows[0].n);
+  ok(await cnt() >= 4, 'có dữ liệu trước khi xoá');
+  await rpcOn(central, U9)('delete_my_account');
+  eq(await cnt(), 0, 'xoá sạch mọi dòng liên quan');
+  await rejects(() => rpcOn(central, ADM)('delete_my_account'), /Không xoá tài khoản quản trị/, 'admin tự xoá');
+  await rejects(() => as(central, '', () => central.query('select public.delete_my_account()')), /./, 'chưa đăng nhập');
+});
+
 /* ---------- Phía máy khách ---------- */
 const CFG = { centralUrl: 'https://central.supabase.co', centralAnonKey: 'k'.repeat(40), localTrialDays: 14, supportText: 'Chuyển khoản…' };
 async function freshStore(name = 'Tạp hóa T') {

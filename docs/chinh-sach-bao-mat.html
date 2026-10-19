@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Chính sách bảo mật — Tạp Hóa - Quản lý cửa hàng</title>
+<!-- GHI CHÚ CHO CHỦ DỰ ÁN: kiểm tra lại tên nhà phát triển và email liên hệ (tìm "TVT Group" và "tvtgroup.support@gmail.com") trước khi đăng.
+     Trang này được đăng lên GitHub Pages bởi workflow .github/workflows/pages.yml (thư mục docs/). -->
+<style>
+  :root { --bg:#f7f6fd; --ink:#1f1d33; --muted:#625f7a; --line:#e3e0f3; --accent:#6d5bf0; --card:#ffffff; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#14131c; --ink:#eceaf8; --muted:#aaa6c4; --line:#322f48; --accent:#9d8cff; --card:#1d1b2a; } }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.7 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  main { max-width:760px; margin:0 auto; padding:24px 18px 64px; }
+  h1 { font-size:28px; line-height:1.25; margin:8px 0 4px; }
+  h2 { font-size:20px; margin:30px 0 8px; padding-top:6px; border-top:1px solid var(--line); }
+  h3 { font-size:16px; margin:18px 0 4px; }
+  p, li { margin:6px 0; }
+  .muted { color:var(--muted); font-size:14px; }
+  table { width:100%; border-collapse:collapse; font-size:14.5px; margin:10px 0; background:var(--card); }
+  th, td { border:1px solid var(--line); padding:8px 10px; text-align:left; vertical-align:top; }
+  th { background:rgba(109,91,240,.12); }
+  a { color:var(--accent); }
+  .box { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 16px; margin:14px 0; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Chính sách bảo mật</h1>
+  <p class="muted">Ứng dụng <b>Tạp Hóa - Quản lý cửa hàng</b> · Nhà phát triển: <b>TVT Group</b> · Cập nhật lần cuối: 18/10/2026 · Liên hệ: <a href="mailto:tvtgroup.support@gmail.com">tvtgroup.support@gmail.com</a></p>
+
+  <div class="box"><p>Điều quan trọng nhất: <b>dữ liệu bán hàng của cửa hàng (hàng hoá, hoá đơn, khách hàng, công nợ, kho…) lưu ngay trên điện thoại của bạn</b>. Nếu bạn bật "Đồng bộ nhiều máy", dữ liệu đó còn được lưu trong <b>dự án Supabase riêng do chính bạn sở hữu</b> — nhà phát triển không truy cập được và không lưu bản sao nào của dữ liệu bán hàng.</p></div>
+
+  <h2>1. Ứng dụng này là gì</h2>
+  <p>Tạp Hóa là ứng dụng quản lý cửa hàng tạp hóa cho chủ cửa hàng và nhân viên: bán hàng, quét mã vạch, kho hàng và hạn dùng, công nợ khách/nhà cung cấp, sổ quỹ, báo cáo, xuất Excel, in hoá đơn qua máy in Bluetooth, mã thanh toán VietQR. Ứng dụng chạy được khi không có Internet.</p>
+
+  <h2>2. Thông tin được thu thập và lưu</h2>
+  <h3>2.1. Lưu trên máy của bạn (không gửi đi đâu)</h3>
+  <p>Hàng hoá và ảnh sản phẩm, hoá đơn, phiếu nhập, kho, khách hàng (tên, số điện thoại, địa chỉ, công nợ), nhà cung cấp, khuyến mãi, sổ quỹ và ca làm việc, danh sách nhân viên (tên, tên đăng nhập, mật khẩu đã băm một chiều), nhật ký hoạt động, cài đặt cửa hàng (gồm tên và số tài khoản ngân hàng để tạo mã VietQR). Dữ liệu nằm trong bộ nhớ của ứng dụng; gỡ ứng dụng hoặc xoá dữ liệu ứng dụng sẽ xoá chúng khỏi máy. Bạn có thể tự sao lưu ra tệp và khôi phục trong mục Cài đặt.</p>
+
+  <h3>2.2. Tài khoản lưu trữ và gói cước — máy chủ Supabase của nhà phát triển (tuỳ chọn)</h3>
+  <p>Chỉ phát sinh khi bạn tạo "tài khoản lưu trữ" trong mục Gói cước:</p>
+  <table>
+    <tr><th>Thông tin</th><th>Mục đích</th><th>Ghi chú</th></tr>
+    <tr><td>Địa chỉ email</td><td>Đăng nhập, xác nhận chủ tài khoản, hỗ trợ</td><td>Bắt buộc nếu muốn dùng gói cước</td></tr>
+    <tr><td>Mật khẩu của tài khoản lưu trữ</td><td>Đăng nhập</td><td>Không lưu dạng chữ thường: do dịch vụ xác thực của Supabase băm một chiều</td></tr>
+    <tr><td>Tên cửa hàng</td><td>Quản lý tài khoản</td><td>Do bạn nhập khi đăng ký</td></tr>
+    <tr><td>Tình trạng gói cước (còn hạn/hết hạn, ngày hết hạn) và yêu cầu gia hạn (gói, ghi chú bạn nhập)</td><td>Mở/khoá chức năng ghi theo gói</td><td></td></tr>
+    <tr><td>Giao dịch gói đăng ký Google Play: mã sản phẩm, mã giao dịch (purchase token), trạng thái, ngày hết hạn</td><td>Xác minh với Google và cập nhật hạn gói khi gia hạn/huỷ/hoàn tiền</td><td>Không có số thẻ hay thông tin thanh toán — do Google Play xử lý</td></tr>
+    <tr><td>Mã băm (SHA-256) của mã thiết bị Android (Android ID) — chỉ ở bản Google Play</td><td>Chống gian lận: mỗi máy chỉ dùng thử miễn phí một lần</td><td>Chỉ lưu mã băm, không lưu Android ID gốc, không dùng cho quảng cáo</td></tr>
+    <tr><td>Địa chỉ dự án Supabase riêng của cửa hàng và khoá công khai (anon) của dự án đó</td><td>Nhà phát triển biết cửa hàng đã liên kết kho và giữ cho kho hoạt động</td><td>Khoá công khai không đủ để đọc dữ liệu: dữ liệu bán hàng cần khoá riêng của từng máy</td></tr>
+  </table>
+
+  <h3>2.3. Dự án Supabase riêng của cửa hàng (tuỳ chọn, do bạn sở hữu)</h3>
+  <p>Nếu bật đồng bộ nhiều máy, các bản ghi bán hàng (hàng hoá, hoá đơn, khách hàng, kho, nhân viên…) được gửi tới dự án Supabase của chính bạn, bảo vệ bằng khoá riêng của từng thiết bị. Bạn là chủ dự án đó và chịu trách nhiệm về dữ liệu trong đó; nhà phát triển không có khoá và không truy cập được.</p>
+
+  <h3>2.4. Thông tin ứng dụng không thu thập</h3>
+  <ul>
+    <li>Không thu thập vị trí (xem mục 3), danh bạ, tin nhắn, ảnh thư viện, micro.</li>
+    <li>Không có quảng cáo, không dùng công cụ phân tích hay theo dõi hành vi của bên thứ ba.</li>
+    <li>Không bán hay cho thuê dữ liệu cá nhân cho bất kỳ ai.</li>
+  </ul>
+
+  <h2>3. Quyền truy cập trên thiết bị</h2>
+  <table>
+    <tr><th>Quyền</th><th>Dùng để</th></tr>
+    <tr><td>Máy ảnh</td><td>Quét mã vạch/QR sản phẩm và mã kết nối máy nhân viên. Hình ảnh được xử lý ngay trên máy (Google ML Kit chạy cục bộ), không lưu và không gửi đi.</td></tr>
+    <tr><td>Bluetooth (quét và kết nối)</td><td>Tìm và kết nối máy in hoá đơn nhiệt.</td></tr>
+    <tr><td>Vị trí chính xác</td><td><b>Chỉ vì Android bắt buộc</b> để quét thiết bị Bluetooth. Ứng dụng không đọc, không lưu và không gửi vị trí.</td></tr>
+    <tr><td>Rung</td><td>Phản hồi khi quét mã.</td></tr>
+    <tr><td>Internet</td><td>Đồng bộ nhiều máy, gói cước, tải danh sách ngân hàng.</td></tr>
+    <tr><td>Thanh toán Google Play</td><td>Mua và gia hạn gói cước trong bản Google Play.</td></tr>
+  </table>
+
+  <h2>4. Bên thứ ba tham gia xử lý</h2>
+  <ul>
+    <li><b>Supabase</b> (máy chủ tài khoản lưu trữ của nhà phát triển và dự án riêng của cửa hàng bạn) — hạ tầng cơ sở dữ liệu, truyền qua HTTPS.</li>
+    <li><b>Google Play</b> — thanh toán và quản lý gói đăng ký; chính sách của Google áp dụng cho phần này.</li>
+    <li><b>Google ML Kit</b> — nhận dạng mã vạch trên máy, không gửi hình ảnh đi.</li>
+    <li><b>vietqr.io</b> — ứng dụng tải danh sách ngân hàng công khai (không gửi dữ liệu của bạn; máy chủ này thấy địa chỉ IP như mọi yêu cầu web). Mã VietQR được tạo ngay trong ứng dụng.</li>
+  </ul>
+
+  <h2>5. Bảo mật</h2>
+  <p>Dữ liệu truyền qua mạng đều dùng HTTPS. Mật khẩu nhân viên được băm một chiều trên máy. Mỗi thiết bị đồng bộ có khoá riêng, chủ cửa hàng có thể thu hồi từng máy. Chúng tôi áp dụng các biện pháp hợp lý nhưng không hệ thống nào an toàn tuyệt đối — hãy đặt mật khẩu mạnh và sao lưu định kỳ.</p>
+
+  <h2>6. Thời gian lưu và quyền xoá dữ liệu</h2>
+  <ul>
+    <li>Dữ liệu trên máy: do bạn kiểm soát; gỡ ứng dụng là xoá.</li>
+    <li>Tài khoản lưu trữ: bạn có thể <b>tự xoá ngay trong ứng dụng</b> (Thêm → Gói cước &amp; tài khoản → Xoá tài khoản) hoặc yêu cầu qua email. Xem <a href="xoa-tai-khoan.html">hướng dẫn xoá tài khoản</a>. Khi xoá, hồ sơ, gói cước, yêu cầu gia hạn và địa chỉ kho trên máy chủ nhà phát triển bị xoá. Mã giao dịch thanh toán có thể được giữ thêm theo yêu cầu của luật kế toán/thuế hoặc để xử lý khiếu nại hoàn tiền.</li>
+    <li>Dự án Supabase riêng của cửa hàng: do bạn sở hữu, bạn tự xoá trong trang Supabase của mình.</li>
+  </ul>
+
+  <h2>7. Trẻ em</h2>
+  <p>Ứng dụng dành cho chủ cửa hàng và nhân viên, không hướng tới trẻ em dưới 18 tuổi và không cố ý thu thập thông tin của trẻ em.</p>
+
+  <h2>8. Thay đổi chính sách và liên hệ</h2>
+  <p>Khi chính sách thay đổi, ngày cập nhật ở đầu trang sẽ đổi và nội dung quan trọng sẽ được nêu trong phần "Có gì mới" của ứng dụng. Mọi câu hỏi hoặc yêu cầu về dữ liệu: <a href="mailto:tvtgroup.support@gmail.com">tvtgroup.support@gmail.com</a>.</p>
+</main>
+</body>
+</html>

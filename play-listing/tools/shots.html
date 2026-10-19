@@ -1,0 +1,18 @@
+<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Dựng dữ liệu mẫu để chụp ảnh</title></head>
+<body style="font:14px system-ui;padding:20px">Đang dựng dữ liệu mẫu…
+<script type="module">
+/* Trang phụ để chụp ảnh cho Google Play: dựng cửa hàng mẫu + dữ liệu demo 30 ngày vào IndexedDB, đăng nhập sẵn, rồi chuyển tới màn hình cần chụp.
+   Mở một lần để dựng dữ liệu (make-shots.ps1 làm sẵn), sau đó chụp từng màn của /www/index.html#/<route> trong cùng hồ sơ trình duyệt. Chỉ dùng trên máy phát triển/trình duyệt chụp ảnh tạm — KHÔNG đưa vào app. */
+import { S, idbAdapter } from '/www/js/store.js';
+import * as E from '/www/js/engine/index.js';
+const route = new URLSearchParams(location.search).get('route') || 'pos';
+await S.init(idbAdapter());
+if (!E.isSetUp()) {
+  await E.setupStore({ store: { name: 'Tạp Hóa Minh Anh', address: '12 Lê Lợi, Quận 1, TP.HCM', phone: '0901 234 567' }, owner: { name: 'Nguyễn Minh Anh', username: 'chu', password: '1234' } });
+  E.loadDemo({ days: 30 });
+}
+await E.login('chu', '1234');
+try { localStorage.setItem('taphoa.staff', S.session.staffId); } catch (e) {}
+await S.flush();
+document.body.textContent = 'Đã dựng xong dữ liệu mẫu.';
+</script></body></html>

@@ -106,3 +106,6 @@ Dùng chung dữ liệu giữa điện thoại chủ, thu ngân, thủ kho… tr
 
 ## Gia hạn gói cước bằng Google Play (bản 1.8)
 Bản app **Google Play** riêng (package name `PLAY_APP_ID`, `billingMode=play`): mua/gia hạn gói 1/6/12 tháng ngay trong **Thêm → Gói cước & tài khoản**; máy chủ (`verify-purchase`) tự hỏi lại Google rồi mới ghi nhận, `rtdn-webhook` cập nhật khi gia hạn/huỷ/hoàn tiền; chặn mua trùng, mua khi đang có gói khác, dùng thử miễn phí chỉ 1 lần/máy. Bản APK chuyển khoản vẫn dùng cách duyệt tay. Workflow `Build bản Google Play (AAB)` ký + R8 + vá plugin. Hướng dẫn từng bước: **HUONG-DAN-GOOGLE-PLAY.md**. Kiểm thử `test/plan.html` (16 kiểm tra: SQL thật trên Postgres, Google Play giả lập). **Chưa** chạy với Google thật / chưa deploy Edge Function / chưa có chữ ký Ed25519 như BEPO.
+
+## Hồ sơ đăng ký Google Play (bản 1.9)
+Thư mục [play-listing/](play-listing/README.md): nội dung trang cửa hàng (vi/en), câu trả lời khai báo Play Console (An toàn dữ liệu, phân loại nội dung, quyền…), kịch bản video, biểu tượng 512, ảnh bìa 1024×500 và 7 ảnh chụp màn hình dựng từ giao diện thật; thư mục [docs/](docs/) có chính sách bảo mật + hướng dẫn xoá tài khoản (đăng bằng GitHub Pages, workflow `pages.yml`). Màn *Gói cước & tài khoản* có thêm **Xoá tài khoản** (bắt buộc với app cho tạo tài khoản).
