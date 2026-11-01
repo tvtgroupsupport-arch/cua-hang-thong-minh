@@ -54,6 +54,23 @@ try {
   ok(Math.abs(ret.stock - (before.stock - 1)) < 1e-6, `trả 1 → tồn tăng lại 1 (${ret.stock})`);
   ok(ret.returned > 0 && ret.returned < after.total, `ghi nhận tiền hàng trả (${ret.returned}/${after.total})`);
 
+  console.log('Xuất toàn bộ 12 báo cáo Excel…');
+  const ex = await ev(`(async () => {
+    const { E } = window.__app; const X = await import('/www/js/xlsx-export.js'); const ExcelJS = await X.loadExcelJS();
+    const out = []; const to = Date.now(), from = to - 30 * 86400000;
+    for (const r of E.REPORTS) {
+      try {
+        const specs = E.buildReport(r.id, from, to);
+        const wb = X.buildWorkbook(ExcelJS, specs, Object.assign({}, E.exportMeta(), { rangeLabel: '30 ngày', title: r.title }));
+        const buf = await wb.xlsx.writeBuffer(); const csv = X.buildCsv(specs, E.exportMeta());
+        out.push({ id: r.id, sheets: specs.length, rows: specs.reduce((a, s) => a + (s.kpi ? 0 : s.rows.length), 0), bytes: buf.byteLength || buf.length, csv: csv.length, nan: csv.includes('NaN') || csv.includes('undefined') || csv.includes('[object') });
+      } catch (e) { out.push({ id: r.id, error: String(e && e.message || e) }); }
+    }
+    return out;
+  })()`);
+  ok(ex.length >= 12, `có ${ex.length} loại báo cáo`);
+  for (const r of ex) ok(!r.error && r.bytes > 3000 && !r.nan, `báo cáo "${r.id}": ${r.error || r.sheets + ' sheet · ' + r.rows + ' dòng · ' + r.bytes + ' byte' + (r.nan ? ' · CÓ NaN/undefined' : '')}`);
+
   console.log('Khoá mềm khi hết hạn gói…');
   await ev(`(async () => { const C = await import('/www/js/cloud/central.js'); window.__C = C; C.setConfig({ centralUrl: 'https://x.supabase.co', centralAnonKey: 'k'.repeat(40), localTrialDays: 14 }); const { S } = window.__app; S.setMeta('trialStart', Date.now() - 30 * 86400000); })()`);
   const blocked = await ev(`(async () => { const { E, S } = window.__app; const L = await import('/www/js/license.js'); L.init(); const p = S.list('products')[0]; try { E.createSale({ lines: [{ productId: p.id, unitId: p.units[0].id, qty: 1 }] }, [{ method: 'cash', amount: p.units[0].price }]); return 'ĐÃ BÁN'; } catch (e) { return e.message; } })()`);
