@@ -146,6 +146,18 @@ test('khoá mềm: gói trả phí còn hạn mở khoá; chỉnh lùi đồng h
   eq(License.status().locked, false);
 });
 
+test('khoá mềm: giờ máy chủ sửa lại mốc đồng hồ bị nhảy sang tương lai (không khoá vĩnh viễn)', async () => {
+  const f = fakeCentralFetch(); Central.setFetch(f.fetch);
+  await Central.signUp({ email: 'clk@b.vn', password: '123456' });
+  S.setMeta('license', undefined); S.setMeta('trialStart', Date.now());
+  S.setMeta('clockHw', Date.now() + 400 * DAY);                       // đồng hồ từng nhảy sang năm sau rồi được chỉnh lại
+  eq(License.status().locked, true, 'trước khi hỏi máy chủ: bị khoá');
+  await License.refresh(true);                                          // giờ máy chủ thật → hạ mốc về đúng
+  ok(Math.abs(S.meta.clockHw - Date.now()) < 5 * 60000, 'mốc đồng hồ đã được đặt lại theo giờ máy chủ: ' + (S.meta.clockHw - Date.now()));
+  eq(License.status().locked, false, 'hết khoá oan');
+  Central.signOut(); Central.setFetch(null); S.setMeta('sync', { enabled: false });
+});
+
 test('khoá mềm: máy phụ chỉ theo hạn của máy chủ cửa hàng (không có dùng thử riêng)', async () => {
   S.setMeta('license', undefined); S.setMeta('trialStart', Date.now() - 20 * DAY);
   eq(License.status().locked, true, 'máy chủ: hết dùng thử');

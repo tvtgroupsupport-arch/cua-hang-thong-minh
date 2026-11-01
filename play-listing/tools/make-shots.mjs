@@ -31,8 +31,8 @@ try {
   await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: dark ? 'dark' : 'light' }] });
   // 1) dựng dữ liệu mẫu (cửa hàng + 30 ngày bán hàng) vào IndexedDB, đăng nhập sẵn
   await send('Page.navigate', { url: BASE + '/play-listing/tools/shots.html' });
-  for (let i = 0; i < 80; i++) { await sleep(500); if (await evalJs("document.body.textContent.includes('Đã dựng xong')")) break; }
-  if (!(await evalJs("document.body.textContent.includes('Đã dựng xong')"))) throw new Error('Dựng dữ liệu mẫu không xong');
+  for (let i = 0; i < 80; i++) { await sleep(500); if (await evalJs("document.body.innerText.includes('Đã dựng xong')")) break; }
+  if (!(await evalJs("document.body.innerText.includes('Đã dựng xong')"))) throw new Error('Dựng dữ liệu mẫu không xong');
   // 2) chụp từng màn
   for (const [name, route] of SHOTS) {
     await send('Page.navigate', { url: 'about:blank' }); await sleep(300);      // tải lại hẳn trang (chỉ đổi #route sẽ không nạp lại ứng dụng)

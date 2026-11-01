@@ -91,7 +91,7 @@ export function toast(msg, type = '', ms = 2600) {
 export async function guard(fn) {
   try { return await fn(); }
   catch (e) {
-    if (e && e.name === 'AppError') toast(e.message, 'error');
+    if (e && (e.name === 'AppError' || e.name === 'CentralError' || e.name === 'ProvisionError' || e.name === 'SyncError')) toast(e.message, 'error');
     else { console.error(e); toast('Lỗi: ' + (e && e.message || e), 'error'); }
   }
 }

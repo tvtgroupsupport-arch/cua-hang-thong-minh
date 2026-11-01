@@ -75,16 +75,22 @@ export async function signIn({ email, password }) {
 export function signOut() { if (S.meta.central) S.setMeta('central', null); }
 
 /** Access token còn hạn (tự làm mới bằng refresh token). */
+let refreshing = null;      // làm mới token chỉ một lần cho nhiều lời gọi đồng thời (refresh token dùng lại lần hai có thể bị từ chối → bị đăng xuất oan)
 export async function accessToken() {
   const s = session(); if (!s || !s.refresh) throw new CentralError('Chưa đăng nhập tài khoản lưu trữ', 'noauth', 401);
   if (s.exp - Date.now() > 60000) return s.access;
-  try {
-    const j = await http('POST', '/auth/v1/token?grant_type=refresh_token', { body: { refresh_token: s.refresh } });
-    return saveSession(j).access;
-  } catch (e) {
-    if (e.status === 400 || e.status === 401) { signOut(); throw new CentralError('Phiên đăng nhập đã hết — hãy đăng nhập lại', 'noauth', 401); }
-    throw e;
+  if (!refreshing) {
+    refreshing = (async () => {
+      try {
+        const j = await http('POST', '/auth/v1/token?grant_type=refresh_token', { body: { refresh_token: s.refresh } });
+        return saveSession(j).access;
+      } catch (e) {
+        if (e.status === 400 || e.status === 401) { signOut(); throw new CentralError('Phiên đăng nhập đã hết — hãy đăng nhập lại', 'noauth', 401); }
+        throw e;
+      } finally { refreshing = null; }
+    })();
   }
+  return refreshing;
 }
 
 export async function rpc(fn, args = {}) {

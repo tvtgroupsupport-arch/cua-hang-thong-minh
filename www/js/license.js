@@ -13,6 +13,10 @@ import * as PlayBilling from './cloud/play-billing.js';
 const DAY = 86400000;
 export const PLAN_MONTHS = [1, 6, 12];
 let lastPersist = 0;
+const listeners = new Set();
+/** Nghe thay đổi trạng thái gói (sau khi hỏi máy chủ): dùng để cập nhật dải cảnh báo ngay. */
+export const onChange = fn => { listeners.add(fn); return () => listeners.delete(fn); };
+const emit = () => { for (const f of [...listeners]) { try { f(); } catch (e) { /* người nghe lỗi không được làm hỏng luồng */ } } };
 
 export const enabled = () => Central.configured();
 export const trialDays = () => { const n = Number(Central.cfg().localTrialDays); return Number.isFinite(n) && n >= 0 ? n : 14; };
@@ -23,7 +27,9 @@ export function now() {
   if (t > hw) { if (t - lastPersist > 60000 || !hw) { lastPersist = t; S.setMeta('clockHw', t); } return t; }
   return hw;
 }
-function seeHw(ms) { if (Number.isFinite(ms) && ms > (Number(S.meta.clockHw) || 0)) S.setMeta('clockHw', ms); }
+/** Giờ máy chủ trung tâm là nguồn tin cậy: đặt mốc đồng hồ đúng bằng giờ đó (cả khi NHỎ hơn mốc cũ). Chống chỉnh lùi đồng hồ vẫn đúng vì có mạng là giờ thật thắng;
+    còn nếu chỉ tăng thì lỡ đồng hồ máy từng nhảy sang tương lai (pin yếu, đặt nhầm ngày) sẽ khoá gói vĩnh viễn dù đã chỉnh lại giờ. */
+function seeHw(ms) { if (Number.isFinite(ms) && Math.abs(ms - (Number(S.meta.clockHw) || 0)) > 1000) { lastPersist = Date.now(); S.setMeta('clockHw', ms); } }
 
 /** Gọi sau khi cửa hàng đã thiết lập: ghi mốc bắt đầu dùng thử cục bộ (một lần). */
 export function ensureTrialStart() {
@@ -76,6 +82,7 @@ export async function refresh(force) {
       else S.meta.license = Object.assign({}, old, { checked_at: pub.checked_at });   // chỉ mốc kiểm tra thay đổi: không đẩy lên đồng bộ
     }
   } catch (e) { /* mất mạng / chưa đăng nhập: dùng bản đã nhớ */ }
+  emit();
   return status();
 }
 

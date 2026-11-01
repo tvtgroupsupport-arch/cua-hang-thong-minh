@@ -4,3 +4,5 @@ android/
 *.log
 www/native-bridge.js
 play-store/
+supabase/.temp/
+supabase/.branches/

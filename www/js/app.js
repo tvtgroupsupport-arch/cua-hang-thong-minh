@@ -175,7 +175,7 @@ async function boot() {
   onBack(handleBack);
   Sync.onStatus(updateSyncBtn); Sync.onDataChanged(debounce(refreshView, 400));
   if (Sync.isEnabled()) Sync.start();
-  License.init(); refreshLicense();
+  License.init(); refreshLicense(); License.onChange(updateBanner);
   onResume(() => { PlayBilling.onResume(); });      // đóng hộp thoại mua của Google mà không trả lời → nút mua không bị khoá mãi
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') refreshLicense(); });
   installSwipe(); installAutoCenter();

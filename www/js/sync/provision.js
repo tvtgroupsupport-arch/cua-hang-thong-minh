@@ -54,7 +54,7 @@ export async function provisionProject({ token, orgSlug, onProgress = () => {}, 
   const total = STEPS.length, step = i => onProgress(i, total, STEPS[i - 1]);
   token = String(token || '').trim();
   if (!token) throw new ProvisionError('Dán mã truy cập Supabase', 'input');
-  if (!/^sbp_[A-Za-z0-9]{20,}$/.test(token)) throw new ProvisionError('Mã truy cập không đúng dạng — mã của Supabase bắt đầu bằng sbp_ (tạo ở Account → Access Tokens).', 'input');
+  if (!/^sbp_[A-Za-z0-9_-]{20,}$/.test(token)) throw new ProvisionError('Mã truy cập không đúng dạng — mã của Supabase bắt đầu bằng sbp_ (tạo ở Account → Access Tokens).', 'input');
   let prov = draftProv();
 
   /* 1) Tổ chức */
