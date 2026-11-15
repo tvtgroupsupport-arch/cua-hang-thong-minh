@@ -94,6 +94,11 @@ jobs:
           tail -n 120 /tmp/step.log
           if [ $rc -ne 0 ]; then echo "::error title=gradle bundleRelease lỗi::$(grep -E 'error|Error|FAILED|What went wrong|Could not|> ' /tmp/step.log | head -c 900 | tr '\n' '|' | tr -d '%\r')"; exit $rc; fi
 
+      # Google Play bắt buộc mọi thư viện native 64-bit căn lề ≥ 16 KB (lỗi "không hỗ trợ kích thước trang bộ nhớ 16 KB"); dừng ngay nếu còn thư viện không đạt
+      - name: Kiểm tra tương thích trang bộ nhớ 16 KB
+        if: steps.keystore.outputs.has_keystore == 'true'
+        run: node scripts/check-16kb.mjs android/app/build/outputs/bundle/release/app-release.aab
+
       - name: Biên dịch APK debug (CHƯA có khoá ký — chỉ xem giao diện, Billing chưa chạy được)
         if: steps.keystore.outputs.has_keystore != 'true'
         working-directory: android

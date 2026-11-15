@@ -51,6 +51,23 @@ if (fs.existsSync(varsFile)) {
   fs.writeFileSync(varsFile, v);
 } else console.log('::warning title=Không có android/variables.gradle::' + fs.readdirSync(path.join(ROOT, 'android')).join(', '));
 
+/* ---------- Google Play: hỗ trợ trang bộ nhớ 16 KB (bắt buộc với app nhắm Android 15+) ----------
+   Thư viện máy in nhiệt (capacitor-thermal-printer) kèm libserial_port.so biên dịch căn lề 4 KB → Play Console báo "không hỗ trợ kích thước trang bộ nhớ 16 KB".
+   Thư viện này CHỈ dùng cho máy in cổng nối tiếp/USB (lớp android_serialport_api.SerialPort, nạp lười khi dùng); app chỉ in qua Bluetooth nên loại khỏi gói là an toàn.
+   Kiểm tra lại sau mỗi lần build: node scripts/check-16kb.mjs <tệp .aab>. */
+{
+  const gradleFile16 = path.join(ROOT, 'android/app/build.gradle');
+  if (fs.existsSync(gradleFile16)) {
+    let g = fs.readFileSync(gradleFile16, 'utf8');
+    if (!g.includes('libserial_port')) {
+      if (!/android\s*\{/.test(g)) throw new Error('build.gradle không có khối "android {" — không thêm được quy tắc loại thư viện 16 KB.');
+      g = g.replace(/android\s*\{/, m => m + "\n    packaging {\n        jniLibs {\n            excludes += ['**/libserial_port.so']   // 4 KB-aligned, chỉ cho máy in cổng nối tiếp (không dùng) — xem scripts/check-16kb.mjs\n        }\n    }\n");
+      fs.writeFileSync(gradleFile16, g);
+      console.log('✓ Đã loại libserial_port.so khỏi gói (tương thích trang bộ nhớ 16 KB)');
+    }
+  }
+}
+
 /* ---------- Bản phát hành Google Play (.aab): chỉ chạy khi đã có android/app/release.keystore (xem android-play.yml) — build APK debug không bị ảnh hưởng ----------
    Mật khẩu KHÔNG ghi cứng ở đây: đọc từ biến môi trường lúc Gradle chạy (GitHub Secrets).
    1) Chữ ký bản release.  2) R8 (mapping.txt) + native debug symbols (hai cảnh báo của Play Console khi tải .aab).  3) Quy tắc giữ lại cho plugin thanh toán/máy in/WebView bridge. */
