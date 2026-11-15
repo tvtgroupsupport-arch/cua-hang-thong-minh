@@ -51,6 +51,23 @@ if (fs.existsSync(varsFile)) {
   fs.writeFileSync(varsFile, v);
 } else console.log('::warning title=Không có android/variables.gradle::' + fs.readdirSync(path.join(ROOT, 'android')).join(', '));
 
+/* ---------- Google Play: CameraX phiên bản mới (16 KB) ----------
+   Plugin quét mã (@capacitor-mlkit/barcode-scanning) mặc định dùng CameraX 1.1.0, có libimage_processing_util_jni.so căn lề 4 KB → Play Console từ chối ("không hỗ trợ kích thước trang bộ nhớ 16 KB").
+   Plugin đọc phiên bản từ ext của dự án gốc nên chỉ cần khai báo bản mới (CameraX 1.4+ đã hỗ trợ 16 KB) trong android/variables.gradle. Kiểm tra: node scripts/check-16kb.mjs <tệp .aab>. */
+{
+  const vf = path.join(ROOT, 'android/variables.gradle');
+  if (fs.existsSync(vf)) {
+    let v = fs.readFileSync(vf, 'utf8');
+    if (!v.includes('androidxCameraCoreVersion')) {
+      const CAM = '1.4.2', lines = ['androidxCameraCoreVersion', 'androidxCameraCamera2Version', 'androidxCameraLifecycleVersion', 'androidxCameraViewVersion'].map(k => `    ${k} = '${CAM}'`).join('\n');
+      if (!/\}\s*$/.test(v)) throw new Error('variables.gradle có cấu trúc lạ — không thêm được phiên bản CameraX.');
+      v = v.replace(/\}\s*$/, lines + '\n}\n');
+      fs.writeFileSync(vf, v);
+      console.log('✓ Đã đặt CameraX ' + CAM + ' (tương thích trang bộ nhớ 16 KB)');
+    }
+  }
+}
+
 /* ---------- Google Play: hỗ trợ trang bộ nhớ 16 KB (bắt buộc với app nhắm Android 15+) ----------
    Thư viện máy in nhiệt (capacitor-thermal-printer) kèm libserial_port.so biên dịch căn lề 4 KB → Play Console báo "không hỗ trợ kích thước trang bộ nhớ 16 KB".
    Thư viện này CHỈ dùng cho máy in cổng nối tiếp/USB (lớp android_serialport_api.SerialPort, nạp lười khi dùng); app chỉ in qua Bluetooth nên loại khỏi gói là an toàn.

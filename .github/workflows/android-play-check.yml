@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
   push:               # TẠM BẬT để kiểm tra bản vá 16 KB — sẽ tắt lại sau lần chạy này
     branches: [main]
-    paths: ['scripts/check-16kb.mjs']
+    paths: ['scripts/check-16kb.mjs', 'scripts/patch-android.mjs']
 
 jobs:
   check:
